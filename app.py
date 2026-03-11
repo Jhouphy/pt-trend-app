@@ -94,12 +94,13 @@ USE_SERPAPI = SERPAPI_KEY is not None
 # ─────────────────────────────────────────
 @st.cache_resource
 def init_pytrends():
+    # 注意：移除 retries / backoff_factor 參數，
+    # 避免新版 urllib3 的 method_whitelist 命名衝突。
+    # 重試邏輯改由 with_retry() 自行處理。
     return TrendReq(
         hl='zh-TW',
         tz=-480,
         timeout=(10, 25),
-        retries=2,
-        backoff_factor=0.5,
         requests_args={
             'headers': {
                 'User-Agent': (
