@@ -275,7 +275,11 @@ def fetch_trends(kw_list, timeframe, geo):
             df = pytrends_fetch_trends(kw_list, timeframe, geo)
 
         if not df.empty:
-            save_cache(cache_key, df.reset_index().to_dict(orient="list"))
+            df_save = df.reset_index()
+            # Timestamp → 字串，避免 JSON 序列化錯誤
+            for col in df_save.select_dtypes(include=["datetime64[ns]", "datetimetz"]).columns:
+                df_save[col] = df_save[col].astype(str)
+            save_cache(cache_key, df_save.to_dict(orient="list"))
         return df, False
     except Exception as e:
         st.error(f"❌ 趨勢查詢失敗：{e}\n\n請等 5~10 分鐘後再試。")
@@ -313,7 +317,10 @@ def fetch_regional(kw_list, timeframe, geo):
         # 地區分布目前只用 pytrends（SerpApi 地區功能需另外串接）
         df = pytrends_fetch_regional(kw_list, timeframe, geo)
         if not df.empty:
-            save_cache(cache_key, df.reset_index().to_dict(orient="list"))
+            df_save = df.reset_index()
+            for col in df_save.select_dtypes(include=["datetime64[ns]", "datetimetz"]).columns:
+                df_save[col] = df_save[col].astype(str)
+            save_cache(cache_key, df_save.to_dict(orient="list"))
         return df, False
     except Exception as e:
         st.error(f"❌ 地區查詢失敗：{e}")
