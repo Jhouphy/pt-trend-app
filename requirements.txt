@@ -1,0 +1,4 @@
+pytrends
+streamlit
+pandas
+plotly
