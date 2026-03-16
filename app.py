@@ -297,10 +297,9 @@ with st.sidebar:
     # ── 直接編輯主題清單 ──
     # 格式：每行一個主題，英文搜尋詞 | 中文標籤
     # 修改後按「套用」即生效，不需要動代碼
-    with st.expander("✏️ 直接編輯主題清單", expanded=False):
+    with st.expander("✏️ 直接編輯主題清單", expanded=True):
         st.caption("每行一個主題，格式：`英文搜尋詞 | 中文標籤`")
-        default_text = "
-".join(f"{en} | {zh}" for en, zh in st.session_state.topics)
+        default_text = "\n".join(f"{en} | {zh}" for en, zh in st.session_state.topics)
         edited = st.text_area(
             "主題清單", value=default_text,
             height=380, label_visibility="collapsed"
