@@ -94,9 +94,9 @@ DEFAULT_TOPICS = [
     ("sciatica",                         "坐骨神經痛"),
     ("cervical spondylosis",             "頸椎病"),
     ("low back pain",                    "腰痛"),
-    ("subacromial impingement syndrome", "肩峰下夾擠症候群"),
+    ("subacromial impingement",          "肩峰下夾擠症候群"),
     ("patellofemoral pain syndrome",     "髕骨股骨疼痛症候群"),
-    ("joint replacement rehabilitation", "關節置換術後復健"),
+    ("joint replacement",                "關節置換術後復健"),
     ("knee pain",                        "膝關節疼痛"),
     ("scoliosis",                        "脊椎側彎"),
     ("myofascial pain syndrome",         "肌筋膜疼痛症候群"),
@@ -294,6 +294,43 @@ with st.sidebar:
     if "topics" not in st.session_state:
         st.session_state.topics = DEFAULT_TOPICS.copy()
 
+    # ── 直接編輯主題清單 ──
+    # 格式：每行一個主題，英文搜尋詞 | 中文標籤
+    # 修改後按「套用」即生效，不需要動代碼
+    with st.expander("✏️ 直接編輯主題清單", expanded=False):
+        st.caption("每行一個主題，格式：`英文搜尋詞 | 中文標籤`")
+        default_text = "
+".join(f"{en} | {zh}" for en, zh in st.session_state.topics)
+        edited = st.text_area(
+            "主題清單", value=default_text,
+            height=380, label_visibility="collapsed"
+        )
+        if st.button("✅ 套用變更"):
+            new_topics = []
+            errors = []
+            for i, line in enumerate(edited.strip().splitlines(), 1):
+                line = line.strip()
+                if not line:
+                    continue
+                if "|" not in line:
+                    errors.append(f"第 {i} 行格式錯誤（缺少 |）：{line}")
+                    continue
+                parts = line.split("|", 1)
+                en = parts[0].strip()
+                zh = parts[1].strip()
+                if en:
+                    new_topics.append((en, zh or en))
+            if errors:
+                for e in errors:
+                    st.error(e)
+            elif new_topics:
+                st.session_state.topics = new_topics
+                st.success(f"✅ 已套用 {len(new_topics)} 個主題！")
+                st.rerun()
+
+    st.caption("或用下方按鈕單筆新增 / 刪除：")
+
+    # 單筆新增
     new_en = st.text_input("英文搜尋詞", placeholder="e.g. shoulder impingement")
     new_zh = st.text_input("中文標籤",   placeholder="e.g. 肩夾擠症候群")
     if st.button("➕ 新增主題"):
@@ -304,6 +341,7 @@ with st.sidebar:
         elif new_en in existing:
             st.warning("此主題已存在")
 
+    # 單筆刪除
     labels = ["（不刪除）"] + [f"{zh}（{en}）" for en, zh in st.session_state.topics]
     del_choice = st.selectbox("刪除主題", labels)
     if st.button("🗑️ 刪除") and del_choice != "（不刪除）":
