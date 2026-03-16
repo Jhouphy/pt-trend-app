@@ -4,6 +4,7 @@ import pandas as pd
 import time
 import json
 import os
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 # ─────────────────────────────────────────
@@ -66,96 +67,178 @@ def cache_age_str(key: str) -> str:
         return ""
 
 # ─────────────────────────────────────────
-# 主題清單（20 個 PT 核心主題）
+# 主題清單
 # ─────────────────────────────────────────
 DEFAULT_TOPICS = [
-    ("adhesive capsulitis",          "五十肩（沾黏性肩關節囊炎）"),
-    ("disc herniation",              "椎間盤突出"),
-    ("lateral epicondylitis",        "網球肘（外側上髁炎）"),
-    ("medial epicondylitis",         "高爾夫球肘（內側上髁炎）"),
-    ("carpal tunnel syndrome",       "腕隧道症候群"),
-    ("osteoarthritis",               "退化性關節炎（骨關節炎）"),
-    ("meniscus injury",              "膝蓋半月板損傷"),
-    ("plantar fasciitis",            "足底筋膜炎"),
-    ("sciatica",                     "坐骨神經痛"),
-    ("cervical spondylosis",         "頸椎病"),
-    ("low back pain",                "腰痛"),
+    ("adhesive capsulitis",              "五十肩（沾黏性肩關節囊炎）"),
+    ("disc herniation",                  "椎間盤突出"),
+    ("lateral epicondylitis",            "網球肘（外側上髁炎）"),
+    ("medial epicondylitis",             "高爾夫球肘（內側上髁炎）"),
+    ("carpal tunnel syndrome",           "腕隧道症候群"),
+    ("osteoarthritis rehabilitation",    "退化性關節炎（骨關節炎）"),
+    ("meniscus injury rehabilitation",   "膝蓋半月板損傷"),
+    ("plantar fasciitis",                "足底筋膜炎"),
+    ("sciatica",                         "坐骨神經痛"),
+    ("cervical spondylosis",             "頸椎病"),
+    ("low back pain physical therapy",   "腰痛"),
     ("subacromial impingement syndrome", "肩峰下夾擠症候群"),
-    ("patellofemoral pain syndrome", "髕骨股骨疼痛症候群"),
+    ("patellofemoral pain syndrome",     "髕骨股骨疼痛症候群"),
     ("joint replacement rehabilitation", "關節置換術後復健"),
-    ("knee pain",                    "膝關節疼痛"),
-    ("scoliosis",                    "脊椎側彎"),
-    ("myofascial pain syndrome",     "肌筋膜疼痛症候群"),
-    ("rotator cuff injury",          "旋轉肌袖損傷"),
-    ("ankle sprain",                 "踝關節扭傷"),
-    ("piriformis syndrome",          "梨狀肌症候群"),
+    ("knee pain physical therapy",       "膝關節疼痛"),
+    ("scoliosis",                        "脊椎側彎"),
+    ("myofascial pain syndrome",         "肌筋膜疼痛症候群"),
+    ("rotator cuff injury rehabilitation","旋轉肌袖損傷"),
+    ("ankle sprain rehabilitation",      "踝關節扭傷"),
+    ("piriformis syndrome",              "梨狀肌症候群"),
 ]
 
 # ─────────────────────────────────────────
-# Semantic Scholar API
+# PubMed API
+# 完全免費，不需要 API Key
+# 官方建議速率：每秒最多 3 次請求
 # ─────────────────────────────────────────
-SEMANTIC_SCHOLAR_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
+PUBMED_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+PUBMED_EFETCH  = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+PUBMED_BASE    = "https://pubmed.ncbi.nlm.nih.gov"
+
+def search_pubmed_ids(topic: str, year_start: int, year_end: int, limit: int) -> list:
+    """Step 1：用關鍵字搜尋，取得論文 ID 清單"""
+    params = {
+        "db": "pubmed",
+        "term": f"{topic}[Title/Abstract] AND physical therapy[Title/Abstract]",
+        "datetype": "pdat",
+        "mindate": str(year_start),
+        "maxdate": str(year_end),
+        "retmax": limit,
+        "sort": "relevance",
+        "retmode": "json",
+    }
+    time.sleep(0.4)  # 每秒最多 3 次，保守設 0.4 秒
+    resp = requests.get(PUBMED_ESEARCH, params=params, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("esearchresult", {}).get("idlist", [])
+
+def fetch_pubmed_details(pmids: list) -> list:
+    """Step 2：用 ID 清單批量抓取論文詳細資料（一次打 API，節省請求次數）"""
+    if not pmids:
+        return []
+
+    params = {
+        "db": "pubmed",
+        "id": ",".join(pmids),
+        "retmode": "xml",
+        "rettype": "abstract",
+    }
+    time.sleep(0.4)
+    resp = requests.get(PUBMED_EFETCH, params=params, timeout=20)
+    resp.raise_for_status()
+
+    papers = []
+    root = ET.fromstring(resp.content)
+
+    for article in root.findall(".//PubmedArticle"):
+        try:
+            # 標題
+            title_el = article.find(".//ArticleTitle")
+            title = "".join(title_el.itertext()) if title_el is not None else ""
+
+            # 作者
+            authors = []
+            for author in article.findall(".//Author")[:3]:
+                last  = author.findtext("LastName", "")
+                first = author.findtext("ForeName", "")
+                if last:
+                    authors.append(f"{last} {first}".strip())
+            author_count = len(article.findall(".//Author"))
+            author_str = ", ".join(authors)
+            if author_count > 3:
+                author_str += " et al."
+
+            # 期刊
+            journal = article.findtext(".//Journal/Title", "") or \
+                      article.findtext(".//ISOAbbreviation", "")
+
+            # 年份
+            year = article.findtext(".//PubDate/Year", "") or \
+                   article.findtext(".//PubDate/MedlineDate", "")[:4]
+
+            # PMID
+            pmid_el = article.find(".//PMID")
+            pmid = pmid_el.text if pmid_el is not None else ""
+
+            # 摘要
+            abstract_parts = article.findall(".//AbstractText")
+            abstract = " ".join("".join(p.itertext()) for p in abstract_parts)
+
+            # DOI
+            doi = ""
+            for eloc in article.findall(".//ELocationID"):
+                if eloc.get("EIdType") == "doi":
+                    doi = eloc.text or ""
+                    break
+
+            link = f"https://doi.org/{doi}" if doi else (f"{PUBMED_BASE}/{pmid}" if pmid else "")
+
+            papers.append({
+                "title":    title,
+                "authors":  author_str,
+                "journal":  journal,
+                "year":     year,
+                "pmid":     pmid,
+                "abstract": abstract,
+                "link":     link,
+            })
+        except Exception:
+            continue
+
+    return papers
 
 def fetch_papers(topic: str, year_start: int, year_end: int, limit: int = 30) -> list:
-    cache_key = f"papers_{topic}_{year_start}_{year_end}_{limit}"
+    """統一入口：搜尋 + 抓取詳細資料，含快取與重試"""
+    cache_key = f"pubmed_{topic}_{year_start}_{year_end}_{limit}"
     cached = load_cache(cache_key)
     if cached:
         return cached
 
-    # year + sort=citationCount 同時使用會讓結果大幅減少
-    # 改為先抓 100 筆，再在 Python 端過濾年份
-    params = {
-        "query": topic,
-        "fields": "title,authors,year,citationCount,abstract,externalIds,openAccessPdf,publicationVenue",
-        "sort": "citationCount:desc",
-        "limit": 100,
-    }
-
-    max_retries = 4
+    max_retries = 3
     for attempt in range(max_retries):
         try:
-            # 每次請求前固定等待 5 秒，被限流後指數增加
-            wait_before = 5 + attempt * 5  # 5 → 10 → 15 → 20 秒
-            time.sleep(wait_before)
+            # Step 1：搜尋 ID
+            pmids = search_pubmed_ids(topic, year_start, year_end, limit)
 
-            resp = requests.get(SEMANTIC_SCHOLAR_URL, params=params, timeout=20)
+            # 若結果不足 10 筆，自動放寬：不限年份重新搜尋
+            year_relaxed = False
+            if len(pmids) < 10:
+                pmids = search_pubmed_ids(topic, 2000, year_end, limit)
+                year_relaxed = True
 
-            if resp.status_code == 429:
-                wait_retry = 60 * (attempt + 1)  # 60 → 120 → 180 秒
-                st.warning(f"⚠️ Semantic Scholar 限流（第 {attempt+1} 次），等待 {wait_retry} 秒後重試...")
-                time.sleep(wait_retry)
-                continue
+            if not pmids:
+                return []
 
-            resp.raise_for_status()
-            data = resp.json()
-            all_papers = data.get("data", [])
+            # Step 2：批量抓取詳細資料（只打一次 API！）
+            papers = fetch_pubmed_details(pmids)
 
-            # ── 年份篩選策略 ──
-            # 先嘗試用指定年份範圍過濾
-            filtered = [
-                p for p in all_papers
-                if p.get("year") and year_start <= int(p["year"]) <= year_end
-            ]
+            # 標記是否放寬年份
+            for p in papers:
+                p["_year_relaxed"] = year_relaxed
 
-            # 若篩選後不足 10 筆，自動放寬：不限年份，確保至少有 10 筆
-            if len(filtered) < 10:
-                filtered = all_papers  # 不限年份，取全部
-                # 標記這些結果是放寬年份後的
-                for p in filtered:
-                    p["_year_relaxed"] = True
-
-            filtered = sorted(filtered, key=lambda x: x.get("citationCount", 0), reverse=True)[:limit]
-
-            save_cache(cache_key, filtered)
-            return filtered
+            save_cache(cache_key, papers)
+            return papers
 
         except requests.exceptions.HTTPError as e:
-            if attempt == max_retries - 1:
-                st.error(f"API 錯誤（已重試 {max_retries} 次）：{e}")
-            continue
+            if e.response is not None and e.response.status_code == 429:
+                wait = 30 * (attempt + 1)
+                st.warning(f"⚠️ PubMed 限流（第 {attempt+1} 次），等待 {wait} 秒後重試...")
+                time.sleep(wait)
+            else:
+                if attempt == max_retries - 1:
+                    st.error(f"API 錯誤：{e}")
+                time.sleep(5)
         except Exception as e:
-            st.error(f"查詢失敗：{e}")
-            return []
+            if attempt == max_retries - 1:
+                st.error(f"查詢失敗：{e}")
+            time.sleep(5)
 
     return []
 
@@ -165,45 +248,28 @@ def papers_to_df(papers: list, exclude_keywords: list) -> pd.DataFrame:
         title    = p.get("title", "") or ""
         abstract = p.get("abstract", "") or ""
 
-        # 排除關鍵字篩選
+        # 排除關鍵字
         excluded = any(
-            kw.strip().lower() in title.lower() or kw.strip().lower() in abstract.lower()
+            kw.lower() in title.lower() or kw.lower() in abstract.lower()
             for kw in exclude_keywords if kw.strip()
         )
         if excluded:
             continue
 
-        # 作者
-        authors    = p.get("authors", []) or []
-        author_str = ", ".join(a.get("name", "") for a in authors[:3])
-        if len(authors) > 3:
-            author_str += " et al."
-
-        # 期刊名稱
-        venue      = p.get("publicationVenue") or {}
-        journal    = venue.get("name", "") or ""
-
-        # 連結（優先 DOI）
-        ext_ids = p.get("externalIds") or {}
-        doi     = ext_ids.get("DOI", "")
-        link    = f"https://doi.org/{doi}" if doi else ""
-        if not link:
-            pdf_info = p.get("openAccessPdf") or {}
-            link = pdf_info.get("url", "")
-
         rows.append({
             "標題":   title,
-            "作者":   author_str,
-            "期刊":   journal,
+            "作者":   p.get("authors", ""),
+            "期刊":   p.get("journal", ""),
             "年份":   p.get("year", ""),
-            "引用數": p.get("citationCount", 0),
             "摘要":   abstract[:300] + "…" if len(abstract) > 300 else abstract,
-            "連結":   link,
+            "連結":   p.get("link", ""),
         })
 
     df = pd.DataFrame(rows)
     if not df.empty:
-        df = df.sort_values("引用數", ascending=False).reset_index(drop=True)
+        # PubMed 沒有引用數，改依年份新到舊排序
+        df["年份"] = pd.to_numeric(df["年份"], errors="coerce")
+        df = df.sort_values("年份", ascending=False).reset_index(drop=True)
         df.index += 1
     return df
 
@@ -211,7 +277,8 @@ def papers_to_df(papers: list, exclude_keywords: list) -> pd.DataFrame:
 # UI
 # ─────────────────────────────────────────
 st.title("📚 PT 文章發想站｜文獻情報")
-st.caption("透過 Semantic Scholar 抓取物理治療相關主題近年最高引用文獻，快速找到衛教文章的科學依據")
+st.caption("透過 PubMed 資料庫抓取物理治療相關主題文獻，快速找到衛教文章的科學依據")
+st.success("✅ 資料來源：PubMed（美國國家醫學圖書館）｜免費、穩定、不需要 API Key")
 
 # ─────────────────────────────────────────
 # 側邊欄
@@ -229,7 +296,7 @@ with st.sidebar:
     )
     year_start, year_end = year_range
 
-    top_n = st.selectbox("每個主題顯示前幾名", options=[10, 20, 30], index=1)
+    top_n = st.selectbox("每個主題顯示幾篇", options=[10, 20, 30], index=1)
 
     st.divider()
 
@@ -252,7 +319,6 @@ with st.sidebar:
     if "topics" not in st.session_state:
         st.session_state.topics = DEFAULT_TOPICS.copy()
 
-    # 新增主題
     new_en = st.text_input("英文搜尋詞", placeholder="e.g. shoulder impingement")
     new_zh = st.text_input("中文標籤",   placeholder="e.g. 肩夾擠症候群")
     if st.button("➕ 新增主題"):
@@ -263,7 +329,6 @@ with st.sidebar:
         elif new_en in existing_en:
             st.warning("此主題已存在")
 
-    # 刪除主題
     topic_labels = ["（不刪除）"] + [f"{zh}（{en}）" for en, zh in st.session_state.topics]
     del_choice = st.selectbox("刪除主題", options=topic_labels)
     if st.button("🗑️ 刪除") and del_choice != "（不刪除）":
@@ -279,23 +344,22 @@ with st.sidebar:
                 os.remove(os.path.join(CACHE_DIR, f))
             except Exception:
                 pass
-        st.success("快取已清除。")
+        st.success("✅ 快取已清除。請逐一點擊各主題的抓取按鈕。")
 
-    st.info(f"📦 快取有效期：{CACHE_DAYS} 天\n\n文獻資料每週自動更新。")
+    st.info(
+        f"📦 快取有效期：{CACHE_DAYS} 天\n\n"
+        "有快取時開 App 不打 API，\n完全不會被限流。"
+    )
 
 # ─────────────────────────────────────────
 # 主畫面
 # ─────────────────────────────────────────
 topics = st.session_state.topics
 
-def topic_label(t):
-    en, zh = t
-    return f"{zh}　({en})"
-
 selected = st.selectbox(
     "選擇查詢主題",
     options=topics,
-    format_func=topic_label
+    format_func=lambda t: f"{t[1]}　({t[0]})"
 )
 
 show_all = st.toggle("顯示所有主題總覽", value=False)
@@ -306,27 +370,38 @@ st.divider()
 # ─────────────────────────────────────────
 def display_topic(topic_tuple):
     en, zh = topic_tuple
-    cache_key = f"papers_{en}_{year_start}_{year_end}_{top_n}"
+    cache_key = f"pubmed_{en}_{year_start}_{year_end}_{top_n}"
+    has_cache = load_cache(cache_key) is not None
 
-    with st.spinner(f"載入「{zh}」的文獻資料..."):
+    if not has_cache:
+        st.markdown(f"### {zh}")
+        st.caption(f"`{en}`　｜　{year_start}–{year_end}　｜　前 {top_n} 篇")
+        st.info("📭 此主題尚無快取。點擊下方按鈕開始抓取（約 5~15 秒）。")
+        if not st.button(f"🔍 抓取「{zh}」的文獻", key=f"fetch_{en}"):
+            return
+        with st.spinner(f"正在從 PubMed 抓取「{zh}」的文獻..."):
+            papers = fetch_papers(en, year_start, year_end, limit=top_n)
+    else:
         papers = fetch_papers(en, year_start, year_end, limit=top_n)
 
-    from_cache = load_cache(cache_key) is not None
     age = cache_age_str(cache_key)
+    from_cache = load_cache(cache_key) is not None
 
     st.markdown(f"### {zh}")
-    st.caption(f"`{en}`　｜　{year_start}–{year_end}　｜　引用數前 {top_n} 名　｜　{'📦 快取' if from_cache else '🔴 即時'} {age}")
+    st.caption(
+        f"`{en}`　｜　{year_start}–{year_end}　｜　前 {top_n} 篇　｜　"
+        f"{'📦 快取' if from_cache else '🔴 即時'} {age}"
+    )
 
     if not papers:
         st.warning("查無文獻，請確認主題名稱或調整年份範圍。")
         return
 
-    # 若系統放寬了年份範圍，顯示提示
-    year_relaxed = any(p.get("_year_relaxed") for p in papers)
-    if year_relaxed:
+    # 放寬年份提示
+    if any(p.get("_year_relaxed") for p in papers):
         st.info(
-            f"ℹ️ 「{zh}」在 {year_start}–{year_end} 年間的文獻不足 10 篇，"
-            "已自動放寬年份範圍以確保結果數量。可考慮調整側邊欄的年份滑桿。"
+            f"ℹ️ 「{zh}」在 {year_start}–{year_end} 年間文獻不足 10 篇，"
+            "已自動擴大至 2000 年至今以確保結果數量。"
         )
 
     df = papers_to_df(papers, exclude_keywords)
@@ -335,23 +410,23 @@ def display_topic(topic_tuple):
         st.warning("所有結果都被排除關鍵字篩掉了，請調整排除詞設定。")
         return
 
-    # 統計指標
+    # 統計
     c1, c2, c3 = st.columns(3)
-    c1.metric("文獻數", f"{len(df)} 篇")
-    c2.metric("最高引用", f"{df['引用數'].max():,} 次")
-    c3.metric("平均引用", f"{int(df['引用數'].mean()):,} 次")
+    c1.metric("找到文獻", f"{len(df)} 篇")
+    valid_years = df["年份"].dropna()
+    c2.metric("最新年份", f"{int(valid_years.max())} 年" if not valid_years.empty else "—")
+    c3.metric("平均年份", f"{int(valid_years.mean())} 年" if not valid_years.empty else "—")
 
     # 論文清單
     for idx, row in df.iterrows():
         journal_tag = f"｜{row['期刊']}" if row["期刊"] else ""
-        with st.expander(
-            f"#{idx}　{row['標題']}　（{row['年份']}{journal_tag}｜引用 {row['引用數']:,} 次）"
-        ):
+        year_tag = f"{int(row['年份'])}" if pd.notna(row["年份"]) else "年份不明"
+        with st.expander(f"#{idx}　{row['標題']}　（{year_tag}{journal_tag}）"):
             st.markdown(f"**作者：** {row['作者']}")
             st.markdown(f"**期刊：** {row['期刊'] if row['期刊'] else '（未知）'}")
             st.markdown(f"**摘要：** {row['摘要'] if row['摘要'] else '（無摘要）'}")
             if row["連結"]:
-                st.markdown(f"[🔗 查看原文]({row['連結']})")
+                st.markdown(f"[🔗 查看原文 / PubMed]({row['連結']})")
             else:
                 st.caption("（無公開連結）")
 
@@ -360,7 +435,7 @@ def display_topic(topic_tuple):
     st.download_button(
         label=f"⬇️ 下載「{zh}」文獻清單 (CSV)",
         data=csv,
-        file_name=f"papers_{en.replace(' ', '_')}_{year_start}_{year_end}.csv",
+        file_name=f"pubmed_{en.replace(' ', '_')}_{year_start}_{year_end}.csv",
         mime="text/csv"
     )
 
@@ -368,21 +443,35 @@ def display_topic(topic_tuple):
 # 全部主題總覽
 # ─────────────────────────────────────────
 def display_all():
-    st.subheader("🗂️ 所有主題總覽（各顯示前 5 名）")
+    st.subheader("🗂️ 所有主題總覽（各顯示前 5 篇）")
     st.caption("切換到單一主題模式可查看完整清單與摘要")
 
-    overview_rows = []
+    # 總覽模式也用按鈕觸發，避免自動打 API
+    if not st.button("📥 載入所有主題（需要一段時間）", key="load_all"):
+        st.info("點擊上方按鈕開始載入所有主題的文獻（每個主題間隔 2 秒，避免限流）。")
+        return
 
-    for en, zh in topics:
+    overview_rows = []
+    progress = st.progress(0, text="開始載入...")
+
+    for i, (en, zh) in enumerate(topics):
+        progress.progress((i + 1) / len(topics), text=f"載入「{zh}」中...（{i+1}/{len(topics)}）")
+
+        cache_key = f"pubmed_{en}_{year_start}_{year_end}_30"
+        has_cache = load_cache(cache_key) is not None
+
         with st.spinner(f"載入「{zh}」..."):
             papers = fetch_papers(en, year_start, year_end, limit=30)
+
         df = papers_to_df(papers, exclude_keywords)
         if df.empty:
             continue
 
         st.markdown(f"#### {zh}　`{en}`")
-        display_df = df[["標題", "期刊", "年份", "引用數", "作者"]].head(5)
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(
+            df[["標題", "期刊", "年份", "作者"]].head(5),
+            use_container_width=True
+        )
 
         for _, row in df.head(5).iterrows():
             overview_rows.append({
@@ -391,7 +480,10 @@ def display_all():
                 **row.to_dict()
             })
 
-        time.sleep(0.5)
+        if not has_cache:
+            time.sleep(2)  # 只有在沒有快取（需要打 API）時才等待
+
+    progress.empty()
 
     if overview_rows:
         st.divider()
@@ -399,7 +491,7 @@ def display_all():
         st.download_button(
             label="⬇️ 下載所有主題總覽 (CSV)",
             data=overview_df.to_csv(index=False, encoding="utf-8-sig"),
-            file_name=f"PT_literature_overview_{year_start}_{year_end}.csv",
+            file_name=f"PT_pubmed_overview_{year_start}_{year_end}.csv",
             mime="text/csv"
         )
 
@@ -415,7 +507,7 @@ else:
 st.divider()
 st.caption(
     "📚 PT 文章發想站 Phase 1　｜　"
-    "資料來源：[Semantic Scholar](https://www.semanticscholar.org/)　｜　"
-    "免費學術 API，不需要 API Key　｜　"
+    "資料來源：[PubMed / NCBI](https://pubmed.ncbi.nlm.nih.gov/)　｜　"
+    "完全免費，不需要 API Key　｜　"
     f"快取有效期：{CACHE_DAYS} 天"
 )
