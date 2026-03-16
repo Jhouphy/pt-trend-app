@@ -111,27 +111,39 @@ def fetch_papers(topic: str, year_start: int, year_end: int, limit: int = 30) ->
         "limit": 100,
     }
 
-    max_retries = 3
+    max_retries = 4
     for attempt in range(max_retries):
         try:
-            time.sleep(3 + attempt * 2)  # 3 → 5 → 7 秒
+            # 每次請求前固定等待 5 秒，被限流後指數增加
+            wait_before = 5 + attempt * 5  # 5 → 10 → 15 → 20 秒
+            time.sleep(wait_before)
+
             resp = requests.get(SEMANTIC_SCHOLAR_URL, params=params, timeout=20)
 
             if resp.status_code == 429:
-                wait = 30 * (attempt + 1)
-                st.warning(f"⚠️ Semantic Scholar 限流（第 {attempt+1} 次），等待 {wait} 秒後重試...")
-                time.sleep(wait)
+                wait_retry = 60 * (attempt + 1)  # 60 → 120 → 180 秒
+                st.warning(f"⚠️ Semantic Scholar 限流（第 {attempt+1} 次），等待 {wait_retry} 秒後重試...")
+                time.sleep(wait_retry)
                 continue
 
             resp.raise_for_status()
             data = resp.json()
             all_papers = data.get("data", [])
 
-            # Python 端過濾年份
+            # ── 年份篩選策略 ──
+            # 先嘗試用指定年份範圍過濾
             filtered = [
                 p for p in all_papers
                 if p.get("year") and year_start <= int(p["year"]) <= year_end
             ]
+
+            # 若篩選後不足 10 筆，自動放寬：不限年份，確保至少有 10 筆
+            if len(filtered) < 10:
+                filtered = all_papers  # 不限年份，取全部
+                # 標記這些結果是放寬年份後的
+                for p in filtered:
+                    p["_year_relaxed"] = True
+
             filtered = sorted(filtered, key=lambda x: x.get("citationCount", 0), reverse=True)[:limit]
 
             save_cache(cache_key, filtered)
@@ -308,6 +320,14 @@ def display_topic(topic_tuple):
     if not papers:
         st.warning("查無文獻，請確認主題名稱或調整年份範圍。")
         return
+
+    # 若系統放寬了年份範圍，顯示提示
+    year_relaxed = any(p.get("_year_relaxed") for p in papers)
+    if year_relaxed:
+        st.info(
+            f"ℹ️ 「{zh}」在 {year_start}–{year_end} 年間的文獻不足 10 篇，"
+            "已自動放寬年份範圍以確保結果數量。可考慮調整側邊欄的年份滑桿。"
+        )
 
     df = papers_to_df(papers, exclude_keywords)
 
