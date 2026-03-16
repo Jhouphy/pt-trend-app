@@ -102,31 +102,50 @@ def fetch_papers(topic: str, year_start: int, year_end: int, limit: int = 30) ->
     if cached:
         return cached
 
+    # year + sort=citationCount 同時使用會讓結果大幅減少
+    # 改為先抓 100 筆，再在 Python 端過濾年份
     params = {
         "query": topic,
         "fields": "title,authors,year,citationCount,abstract,externalIds,openAccessPdf,publicationVenue",
         "sort": "citationCount:desc",
-        "limit": limit,
-        "year": f"{year_start}-{year_end}",
+        "limit": 100,
     }
 
-    try:
-        time.sleep(1)
-        resp = requests.get(SEMANTIC_SCHOLAR_URL, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        papers = data.get("data", [])
-        save_cache(cache_key, papers)
-        return papers
-    except requests.exceptions.HTTPError as e:
-        if resp.status_code == 429:
-            st.error("⚠️ Semantic Scholar 暫時限流，請稍等 1 分鐘後重試。")
-        else:
-            st.error(f"API 錯誤：{e}")
-        return []
-    except Exception as e:
-        st.error(f"查詢失敗：{e}")
-        return []
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            time.sleep(3 + attempt * 2)  # 3 → 5 → 7 秒
+            resp = requests.get(SEMANTIC_SCHOLAR_URL, params=params, timeout=20)
+
+            if resp.status_code == 429:
+                wait = 30 * (attempt + 1)
+                st.warning(f"⚠️ Semantic Scholar 限流（第 {attempt+1} 次），等待 {wait} 秒後重試...")
+                time.sleep(wait)
+                continue
+
+            resp.raise_for_status()
+            data = resp.json()
+            all_papers = data.get("data", [])
+
+            # Python 端過濾年份
+            filtered = [
+                p for p in all_papers
+                if p.get("year") and year_start <= int(p["year"]) <= year_end
+            ]
+            filtered = sorted(filtered, key=lambda x: x.get("citationCount", 0), reverse=True)[:limit]
+
+            save_cache(cache_key, filtered)
+            return filtered
+
+        except requests.exceptions.HTTPError as e:
+            if attempt == max_retries - 1:
+                st.error(f"API 錯誤（已重試 {max_retries} 次）：{e}")
+            continue
+        except Exception as e:
+            st.error(f"查詢失敗：{e}")
+            return []
+
+    return []
 
 def papers_to_df(papers: list, exclude_keywords: list) -> pd.DataFrame:
     rows = []
