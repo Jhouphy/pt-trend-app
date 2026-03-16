@@ -289,22 +289,38 @@ with st.sidebar:
     exclude_kws = [k.strip() for k in exclude_raw.split(",") if k.strip()]
 
     st.divider()
-    st.subheader("📋 主題管理")
 
     if "topics" not in st.session_state:
         st.session_state.topics = DEFAULT_TOPICS.copy()
 
-    # ── 直接編輯主題清單 ──
-    # 格式：每行一個主題，英文搜尋詞 | 中文標籤
-    # 修改後按「套用」即生效，不需要動代碼
-    with st.expander("✏️ 直接編輯主題清單", expanded=True):
+    # ── 主題管理標題列（含 ✏️ 編輯按鈕）──
+    col_title, col_btn = st.columns([3, 1])
+    col_title.subheader("📋 主題管理")
+    edit_clicked = col_btn.button("✏️ 編輯", use_container_width=True)
+
+    # ── 顯示目前主題清單（唯讀預覽）──
+    for en, zh in st.session_state.topics:
+        st.caption(f"• {zh}　`{en}`")
+
+    # ── ✏️ 按下後顯示編輯區塊 ──
+    if "show_topic_editor" not in st.session_state:
+        st.session_state.show_topic_editor = False
+    if edit_clicked:
+        st.session_state.show_topic_editor = not st.session_state.show_topic_editor
+
+    if st.session_state.show_topic_editor:
+        st.divider()
+        st.markdown("**✏️ 編輯主題清單**")
         st.caption("每行一個主題，格式：`英文搜尋詞 | 中文標籤`")
-        default_text = "\n".join(f"{en} | {zh}" for en, zh in st.session_state.topics)
+        default_text = "
+".join(f"{en} | {zh}" for en, zh in st.session_state.topics)
         edited = st.text_area(
             "主題清單", value=default_text,
-            height=380, label_visibility="collapsed"
+            height=380, label_visibility="collapsed",
+            key="topic_editor_textarea"
         )
-        if st.button("✅ 套用變更"):
+        c1, c2 = st.columns(2)
+        if c1.button("✅ 套用", use_container_width=True):
             new_topics = []
             errors = []
             for i, line in enumerate(edited.strip().splitlines(), 1):
@@ -312,41 +328,24 @@ with st.sidebar:
                 if not line:
                     continue
                 if "|" not in line:
-                    errors.append(f"第 {i} 行格式錯誤（缺少 |）：{line}")
+                    errors.append(f"第 {i} 行格式錯誤：{line}")
                     continue
                 parts = line.split("|", 1)
-                en = parts[0].strip()
-                zh = parts[1].strip()
-                if en:
-                    new_topics.append((en, zh or en))
+                en_new = parts[0].strip()
+                zh_new = parts[1].strip()
+                if en_new:
+                    new_topics.append((en_new, zh_new or en_new))
             if errors:
-                for e in errors:
-                    st.error(e)
+                for err in errors:
+                    st.error(err)
             elif new_topics:
                 st.session_state.topics = new_topics
+                st.session_state.show_topic_editor = False
                 st.success(f"✅ 已套用 {len(new_topics)} 個主題！")
                 st.rerun()
-
-    st.caption("或用下方按鈕單筆新增 / 刪除：")
-
-    # 單筆新增
-    new_en = st.text_input("英文搜尋詞", placeholder="e.g. shoulder impingement")
-    new_zh = st.text_input("中文標籤",   placeholder="e.g. 肩夾擠症候群")
-    if st.button("➕ 新增主題"):
-        existing = [t[0] for t in st.session_state.topics]
-        if new_en and new_en not in existing:
-            st.session_state.topics.append((new_en, new_zh or new_en))
-            st.success(f"已新增：{new_zh or new_en}")
-        elif new_en in existing:
-            st.warning("此主題已存在")
-
-    # 單筆刪除
-    labels = ["（不刪除）"] + [f"{zh}（{en}）" for en, zh in st.session_state.topics]
-    del_choice = st.selectbox("刪除主題", labels)
-    if st.button("🗑️ 刪除") and del_choice != "（不刪除）":
-        idx = labels.index(del_choice) - 1
-        removed = st.session_state.topics.pop(idx)
-        st.success(f"已刪除：{removed[1]}")
+        if c2.button("✖️ 取消", use_container_width=True):
+            st.session_state.show_topic_editor = False
+            st.rerun()
 
     st.divider()
     if st.button("🔄 清除快取（重新抓取）"):
