@@ -75,20 +75,20 @@ DEFAULT_TOPICS = [
     ("lateral epicondylitis",            "網球肘（外側上髁炎）"),
     ("medial epicondylitis",             "高爾夫球肘（內側上髁炎）"),
     ("carpal tunnel syndrome",           "腕隧道症候群"),
-    ("osteoarthritis rehabilitation",    "退化性關節炎（骨關節炎）"),
-    ("meniscus injury rehabilitation",   "膝蓋半月板損傷"),
+    ("osteoarthritis",                   "退化性關節炎（骨關節炎）"),
+    ("meniscus injury",                  "膝蓋半月板損傷"),
     ("plantar fasciitis",                "足底筋膜炎"),
     ("sciatica",                         "坐骨神經痛"),
     ("cervical spondylosis",             "頸椎病"),
-    ("low back pain physical therapy",   "腰痛"),
+    ("low back pain",                    "腰痛"),
     ("subacromial impingement syndrome", "肩峰下夾擠症候群"),
     ("patellofemoral pain syndrome",     "髕骨股骨疼痛症候群"),
     ("joint replacement rehabilitation", "關節置換術後復健"),
-    ("knee pain physical therapy",       "膝關節疼痛"),
+    ("knee pain",                        "膝關節疼痛"),
     ("scoliosis",                        "脊椎側彎"),
     ("myofascial pain syndrome",         "肌筋膜疼痛症候群"),
-    ("rotator cuff injury rehabilitation","旋轉肌袖損傷"),
-    ("ankle sprain rehabilitation",      "踝關節扭傷"),
+    ("rotator cuff",                    "旋轉肌袖損傷"),
+    ("ankle sprain",                     "踝關節扭傷"),
     ("piriformis syndrome",              "梨狀肌症候群"),
 ]
 
@@ -111,7 +111,7 @@ def search_pubmed_ids(topic: str, limit: int) -> list:
     """
     params = {
         "db": "pubmed",
-        "term": f"{topic}[Title/Abstract] AND physical therapy[Title/Abstract]",
+        "term": f"{topic}[Title/Abstract]",
         "retmax": 200,  # 多抓一些，讓 Python 端過濾後仍有足夠數量
         "sort": "relevance",
         "retmode": "json",
