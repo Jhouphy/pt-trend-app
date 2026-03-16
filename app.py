@@ -101,19 +101,22 @@ PUBMED_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 PUBMED_EFETCH  = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 PUBMED_BASE    = "https://pubmed.ncbi.nlm.nih.gov"
 
-def search_pubmed_ids(topic: str, year_start: int, year_end: int, limit: int) -> list:
-    """Step 1：用關鍵字搜尋，取得論文 ID 清單"""
+def search_pubmed_ids(topic: str, limit: int) -> list:
+    """Step 1：用關鍵字搜尋，取得論文 ID 清單（不在 API 端限制年份）
+    
+    ⚠️ 不在 API 端篩選年份的原因：
+    PubMed 的 relevance 排序受日期範圍影響，
+    範圍越大反而會讓舊論文擠進來、近年文獻掉出去。
+    改為一次抓足夠多的 ID，再於 Python 端過濾年份，確保結果一致。
+    """
     params = {
         "db": "pubmed",
         "term": f"{topic}[Title/Abstract] AND physical therapy[Title/Abstract]",
-        "datetype": "pdat",
-        "mindate": str(year_start),
-        "maxdate": str(year_end),
-        "retmax": limit,
+        "retmax": 200,  # 多抓一些，讓 Python 端過濾後仍有足夠數量
         "sort": "relevance",
         "retmode": "json",
     }
-    time.sleep(0.4)  # 每秒最多 3 次，保守設 0.4 秒
+    time.sleep(0.4)
     resp = requests.get(PUBMED_ESEARCH, params=params, timeout=15)
     resp.raise_for_status()
     data = resp.json()
@@ -194,53 +197,77 @@ def fetch_pubmed_details(pmids: list) -> list:
 
     return papers
 
+# 固定的 base cache key（不含 year_start/year_end/limit，讓總覽和單一主題共用）
+def _base_cache_key(topic: str) -> str:
+    return f"pubmed_base_{topic}"
+
 def fetch_papers(topic: str, year_start: int, year_end: int, limit: int = 30) -> list:
-    """統一入口：搜尋 + 抓取詳細資料，含快取與重試"""
-    cache_key = f"pubmed_{topic}_{year_start}_{year_end}_{limit}"
-    cached = load_cache(cache_key)
-    if cached:
-        return cached
+    """統一入口：搜尋 + 抓取詳細資料，含快取與重試
+    
+    快取策略：用 base key 儲存完整原始資料（不含年份/筆數篩選），
+    顯示時再動態過濾年份、取前 limit 筆。
+    這樣總覽模式和單一主題模式可以共用同一份快取，不會重複打 API。
+    """
+    base_key = _base_cache_key(topic)
+    cached_raw = load_cache(base_key)
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            # Step 1：搜尋 ID
-            pmids = search_pubmed_ids(topic, year_start, year_end, limit)
+    if cached_raw is None:
+        # 沒有快取，需要打 API
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Step 1：搜尋 ID（不限年份，多抓 200 筆）
+                pmids = search_pubmed_ids(topic, limit=200)
+                if not pmids:
+                    return []
 
-            # 若結果不足 10 筆，自動放寬：不限年份重新搜尋
-            year_relaxed = False
-            if len(pmids) < 10:
-                pmids = search_pubmed_ids(topic, 2000, year_end, limit)
-                year_relaxed = True
+                # Step 2：批量抓取詳細資料（只打一次 API）
+                papers = fetch_pubmed_details(pmids)
+                save_cache(base_key, papers)
+                cached_raw = papers
+                break
 
-            if not pmids:
-                return []
-
-            # Step 2：批量抓取詳細資料（只打一次 API！）
-            papers = fetch_pubmed_details(pmids)
-
-            # 標記是否放寬年份
-            for p in papers:
-                p["_year_relaxed"] = year_relaxed
-
-            save_cache(cache_key, papers)
-            return papers
-
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 429:
-                wait = 30 * (attempt + 1)
-                st.warning(f"⚠️ PubMed 限流（第 {attempt+1} 次），等待 {wait} 秒後重試...")
-                time.sleep(wait)
-            else:
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 429:
+                    wait = 30 * (attempt + 1)
+                    st.warning(f"⚠️ PubMed 限流（第 {attempt+1} 次），等待 {wait} 秒後重試...")
+                    time.sleep(wait)
+                else:
+                    if attempt == max_retries - 1:
+                        st.error(f"API 錯誤：{e}")
+                    time.sleep(5)
+            except Exception as e:
                 if attempt == max_retries - 1:
-                    st.error(f"API 錯誤：{e}")
+                    st.error(f"查詢失敗：{e}")
                 time.sleep(5)
-        except Exception as e:
-            if attempt == max_retries - 1:
-                st.error(f"查詢失敗：{e}")
-            time.sleep(5)
 
-    return []
+        if cached_raw is None:
+            return []
+
+    # Python 端過濾年份（這樣改年份不需要重新打 API）
+    filtered = []
+    year_relaxed = False
+    for p in cached_raw:
+        try:
+            y = int(str(p.get("year", "0"))[:4])
+            if year_start <= y <= year_end:
+                filtered.append(p)
+        except Exception:
+            continue
+
+    # 若篩選後不足 10 筆，自動放寬年份顯示所有資料
+    if len(filtered) < 10:
+        filtered = cached_raw
+        year_relaxed = True
+
+    # 依年份新到舊排序，取前 limit 筆
+    filtered = sorted(filtered, key=lambda x: int(str(x.get("year", "0"))[:4]), reverse=True)[:limit]
+
+    # 標記年份是否放寬
+    for p in filtered:
+        p["_year_relaxed"] = year_relaxed
+
+    return filtered
 
 def papers_to_df(papers: list, exclude_keywords: list) -> pd.DataFrame:
     rows = []
@@ -370,8 +397,8 @@ st.divider()
 # ─────────────────────────────────────────
 def display_topic(topic_tuple):
     en, zh = topic_tuple
-    cache_key = f"pubmed_{en}_{year_start}_{year_end}_{top_n}"
-    has_cache = load_cache(cache_key) is not None
+    base_key = _base_cache_key(en)  # 共用 base key，與總覽模式一致
+    has_cache = load_cache(base_key) is not None
 
     if not has_cache:
         st.markdown(f"### {zh}")
@@ -384,8 +411,8 @@ def display_topic(topic_tuple):
     else:
         papers = fetch_papers(en, year_start, year_end, limit=top_n)
 
-    age = cache_age_str(cache_key)
-    from_cache = load_cache(cache_key) is not None
+    age = cache_age_str(base_key)
+    from_cache = load_cache(base_key) is not None
 
     st.markdown(f"### {zh}")
     st.caption(
@@ -457,8 +484,7 @@ def display_all():
     for i, (en, zh) in enumerate(topics):
         progress.progress((i + 1) / len(topics), text=f"載入「{zh}」中...（{i+1}/{len(topics)}）")
 
-        cache_key = f"pubmed_{en}_{year_start}_{year_end}_30"
-        has_cache = load_cache(cache_key) is not None
+        has_cache = load_cache(_base_cache_key(en)) is not None
 
         with st.spinner(f"載入「{zh}」..."):
             papers = fetch_papers(en, year_start, year_end, limit=30)
