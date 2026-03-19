@@ -4,7 +4,7 @@ import datetime
 import requests
 import xml.etree.ElementTree as ET
 import time
-from muscles_data import MUSCLES, MOVEMENTS, ALIASES
+from muscles_data import MUSCLES, MOVEMENTS, ALIASES, SOURCES
 
 st.set_page_config(page_title="PT 文章發想站", page_icon="📚", layout="wide")
 
@@ -543,6 +543,12 @@ with tab_muscle:
                         st.info("\n".join(f"• {f}" for f in info["functions"]))
                     if info.get("antagonists"):
                         st.markdown(f"**拮抗肌：** {', '.join(info['antagonists'])}")
+
+    # ── 資料來源 ──
+    st.divider()
+    st.markdown("**📖 資料來源**")
+    for src in SOURCES:
+        st.markdown(f"- [{src['name']}]({src['url']})　*{src['note']}*")
 
 
 st.divider()

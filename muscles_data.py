@@ -191,7 +191,7 @@ MUSCLES = {
         "origin": "Superior pubic ramus (Pectineal line of pubis)",
         "insertion": "Pectineal line of femur; Linea aspera of femur",
         "innervation": "Femoral nerve (L2-L3); Obturator nerve (L2-L3)",
-        "functions": ["Hip adduction", "Hip flexion", "Hip external rotation", "Pelvis stabilization"],
+        "functions": ["Hip adduction", "Hip flexion", "Hip medial rotation (weak)", "Pelvis stabilization"],
         "antagonists": ["Hip abductors"],
         "region": "Medial Thigh",
     },
@@ -200,7 +200,7 @@ MUSCLES = {
         "origin": "Adductor part: Inferior pubic ramus, Ischial ramus; Ischiocondylar part: Ischial tuberosity",
         "insertion": "Adductor part: Gluteal tuberosity, Linea aspera, Medial supracondylar line; Ischiocondylar part: Adductor tubercle",
         "innervation": "Adductor part: Obturator nerve (L2-L4); Ischiocondylar part: Tibial division of sciatic nerve (L4)",
-        "functions": ["Hip adduction", "Hip flexion (adductor part)", "Hip extension (ischiocondylar part)", "Pelvis stabilization"],
+        "functions": ["Hip adduction", "Hip flexion (adductor part)", "Hip medial rotation (adductor part)", "Hip extension (ischiocondylar part)", "Pelvis stabilization"],
         "antagonists": ["Hip abductors", "Gluteus medius"],
         "region": "Medial Thigh",
     },
@@ -209,7 +209,7 @@ MUSCLES = {
         "origin": "Anterior body of pubis",
         "insertion": "Linea aspera of femur (medial lip)",
         "innervation": "Obturator nerve (L2-L4)",
-        "functions": ["Hip adduction", "Hip flexion", "Hip external rotation", "Pelvis stabilization"],
+        "functions": ["Hip adduction", "Hip flexion", "Hip medial rotation (weak)", "Pelvis stabilization"],
         "antagonists": ["Gluteus medius", "Gluteus minimus", "Tensor fasciae latae"],
         "region": "Medial Thigh",
     },
@@ -218,7 +218,7 @@ MUSCLES = {
         "origin": "Anterior body of pubis; Inferior pubic ramus",
         "insertion": "Linea aspera of femur (medial lip)",
         "innervation": "Obturator nerve (L2-L4)",
-        "functions": ["Hip adduction", "Hip flexion", "Hip external rotation"],
+        "functions": ["Hip adduction", "Hip flexion", "Hip medial rotation (weak)"],
         "antagonists": ["Hip abductors"],
         "region": "Medial Thigh",
     },
@@ -227,7 +227,7 @@ MUSCLES = {
         "origin": "Inferior pubic ramus",
         "insertion": "Gluteal tuberosity of femur",
         "innervation": "Obturator nerve (L2-L4)",
-        "functions": ["Hip adduction", "Hip external rotation"],
+        "functions": ["Hip adduction", "Hip medial rotation (weak)"],
         "antagonists": ["Hip abductors"],
         "region": "Medial Thigh",
     },
@@ -508,8 +508,8 @@ MUSCLES = {
         "zh": "大菱形肌",
         "origin": "Spinous processes T2-T5",
         "insertion": "Medial border of scapula (between spine and inferior angle)",
-        "innervation": "Dorsal scapular nerve (C4-C5)",
-        "functions": ["Scapular retraction", "Scapular downward rotation", "Scapular elevation (weak)"],
+        "innervation": "Dorsal scapular nerve (C5)",
+        "functions": ["Scapular retraction", "Scapular elevation", "Scapular downward rotation"],
         "antagonists": ["Serratus anterior", "Pectoralis minor"],
         "region": "Back",
     },
@@ -517,8 +517,8 @@ MUSCLES = {
         "zh": "小菱形肌",
         "origin": "Ligamentum nuchae; Spinous processes C7-T1",
         "insertion": "Medial border of scapula at level of scapular spine",
-        "innervation": "Dorsal scapular nerve (C4-C5)",
-        "functions": ["Scapular retraction", "Scapular downward rotation"],
+        "innervation": "Dorsal scapular nerve (C5)",
+        "functions": ["Scapular retraction", "Scapular elevation", "Scapular downward rotation"],
         "antagonists": ["Serratus anterior"],
         "region": "Back",
     },
@@ -1109,3 +1109,30 @@ ALIASES = {
     "旋轉肌袖": ["supraspinatus", "infraspinatus", "teres minor", "subscapularis"],
     "小腿三頭肌": ["gastrocnemius", "soleus"],
 }
+
+
+# ─────────────────────────────────────────
+# 資料來源
+# ─────────────────────────────────────────
+SOURCES = [
+    {
+        "name": "UAMS Department of Neuroscience – Muscle Tables",
+        "url": "https://medicine.uams.edu/neuroscience/education/medical-school-courses/human-structure-module/anatomy-tables/muscle-tables/",
+        "note": "University of Arkansas for Medical Sciences, Human Structure Module"
+    },
+    {
+        "name": "Kenhub – Lower Limb Muscle Charts",
+        "url": "https://www.kenhub.com",
+        "note": "Cheat Sheet (English Terminology)"
+    },
+    {
+        "name": "Gray\'s Anatomy",
+        "url": "https://en.wikipedia.org/wiki/Gray%27s_Anatomy",
+        "note": "Standard anatomical reference"
+    },
+    {
+        "name": "Wikipedia – Human Anatomy",
+        "url": "https://en.wikipedia.org/wiki/Muscle",
+        "note": "Supplementary reference for individual muscle articles"
+    },
+]
