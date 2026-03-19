@@ -773,7 +773,7 @@ with tab_drug:
         if is_corrected:
             st.info(f"💡 已自動修正：「{drug_query}」→「{corrected_zh}」，以英文學名「{en_query}」查詢")
         elif zh_label and zh_label != en_query and any('\u4e00' <= c <= '\u9fff' for c in drug_query):
-            st.caption(f"中文輸入「drug_query}」→ 以英文學名「{en_query}」查詢")
+            st.caption(f"中文輸入「{drug_query}」→ 以英文學名「{en_query}」查詢")
 
         c1, c2 = st.columns(2)
         c1.link_button(
