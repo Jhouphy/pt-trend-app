@@ -614,6 +614,20 @@ with tab_drug:
         "外用藥": ["lidocaine", "capsaicin", "diclofenac gel"],
     }
 
+    # ── 翻譯函式（使用 deep-translator，不需要 API Key）──
+    def translate_to_zh(text: str) -> str:
+        """將英文翻譯為繁體中文，藥物名稱不翻譯"""
+        if not text or text == "（無資料）":
+            return text
+        try:
+            from deep_translator import GoogleTranslator
+            # 限制長度避免超過 API 限制
+            if len(text) > 4500:
+                text = text[:4500] + "..."
+            return GoogleTranslator(source="en", target="zh-TW").translate(text)
+        except Exception as e:
+            return f"（翻譯失敗：{e}）"
+
     if "drug_quick" not in st.session_state:
         st.session_state.drug_quick = ""
 
@@ -674,26 +688,31 @@ with tab_drug:
 
                 with st.expander(f"#{i}　{brand}　｜　{generic}"):
                     st.caption(f"製造商：{manuf}")
+
+                    show_zh = st.toggle(
+                        "🌐 顯示中文翻譯（原文保留）",
+                        value=False,
+                        key=f"tr_{i}_{drug_query[:10]}"
+                    )
+
+                    fields = [
+                        ("🎯 適應症 Indications",        "info",    parse_field(res, "indications_and_usage", "purpose")),
+                        ("🚫 禁忌症 Contraindications",  "warning", parse_field(res, "contraindications")),
+                        ("⚠️ 副作用 Adverse Reactions",  "error",   parse_field(res, "adverse_reactions", "warnings_and_cautions", "warnings")),
+                        ("📌 注意事項 Warnings",         "warning", parse_field(res, "warnings_and_cautions", "precautions", "information_for_patients")),
+                        ("💊 劑量 Dosage & Administration", "info", parse_field(res, "dosage_and_administration")),
+                    ]
+
                     col_a, col_b = st.columns(2)
-
-                    with col_a:
-                        st.markdown("**🎯 適應症 Indications**")
-                        st.info(parse_field(res, "indications_and_usage", "purpose"))
-
-                        st.markdown("**🚫 禁忌症 Contraindications**")
-                        st.warning(parse_field(res, "contraindications"))
-
-                    with col_b:
-                        st.markdown("**⚠️ 副作用 Adverse Reactions**")
-                        st.error(parse_field(res, "adverse_reactions",
-                                             "warnings_and_cautions", "warnings"))
-
-                        st.markdown("**📌 注意事項 Warnings/Precautions**")
-                        st.warning(parse_field(res, "warnings_and_cautions",
-                                               "precautions", "information_for_patients"))
-
-                    st.markdown("**💊 劑量 Dosage & Administration**")
-                    st.info(parse_field(res, "dosage_and_administration"))
+                    for fi, (label, color, eng_text) in enumerate(fields):
+                        col = col_a if fi % 2 == 0 else col_b
+                        with col:
+                            st.markdown(f"**{label}**")
+                            getattr(st, color)(eng_text)
+                            if show_zh and eng_text != "（無資料）":
+                                with st.spinner("翻譯中..."):
+                                    zh_text = translate_to_zh(eng_text)
+                                st.caption(f"📝 **中文：** {zh_text}")
 
         st.divider()
         st.caption(
