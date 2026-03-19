@@ -722,8 +722,6 @@ with tab_drug:
             return f"（翻譯失敗：{e}）"
 
     # ── Session State 初始化 ──
-    if "drug_quick" not in st.session_state:
-        st.session_state.drug_quick = ""
     if "drug_input_val" not in st.session_state:
         st.session_state.drug_input_val = ""
 
@@ -737,48 +735,53 @@ with tab_drug:
             btn_label = f"{d}  {zh}" if zh else d
             if d_cols[i].button(btn_label, key=f"dq_{cat_idx}_{i}_{d}",
                                 use_container_width=True):
-                st.session_state["drug_input_val"] = d
+                # ✅ 直接寫入 widget 的 key，rerun 後 text_input 會讀取到新值
+                st.session_state["drug_input"] = d
                 st.rerun()
 
     st.divider()
 
     # ── 搜尋框 ──
+    # ✅ 關鍵修正：移除 value= 參數，完全由 key= 管理 widget 狀態
+    #    避免每次 rerun 時 value= 覆蓋掉 widget 的當前值，造成畫面跳掉
     drug_query = st.text_input(
         "🔍 輸入藥品名稱（英文學名、商品名或中文）",
-        value=st.session_state.drug_input_val,
         placeholder="e.g. ibuprofen / 布洛芬 / 布洛分 / naproxen / gabapentin",
         key="drug_input"
     ).strip()
 
-    # 同步手動輸入回 session_state
-    if drug_query != st.session_state.drug_input_val:
-        st.session_state.drug_input_val = drug_query
-
     st.divider()
 
-    if drug_query:
-        # 解析輸入（含近音字修正）
-        en_query, zh_label = resolve_query(drug_query)
+    # ── 搜尋觸發：drug_query 改變才打 API ──
+    if drug_query and drug_query != st.session_state.drug_last_query:
+        en_query_fetch, _ = resolve_query(drug_query)
+        with st.spinner("查詢中..."):
+            st.session_state.drug_results      = search_openfda(en_query_fetch)
+            st.session_state.drug_last_query   = drug_query
+            st.session_state.drug_translations = {}  # 換藥時清除翻譯快取
 
-        # 偵測是否為近音字修正
+    # ── 顯示區：完全依賴 session_state，與 drug_query 當下是否為空無關 ──
+    # ✅ 核心：用 drug_results is not None 判斷，不受 widget rerun 影響
+    if st.session_state.drug_results is not None:
+        display_query = st.session_state.drug_last_query
+        en_query, zh_label = resolve_query(display_query)
+
         is_corrected = (
-            any('\u4e00' <= c <= '\u9fff' for c in drug_query)
-            and drug_query in DRUG_PHONETIC
+            any('\u4e00' <= c <= '\u9fff' for c in display_query)
+            and display_query in DRUG_PHONETIC
         )
-        corrected_zh = DRUG_PHONETIC.get(drug_query, drug_query)
-
+        corrected_zh  = DRUG_PHONETIC.get(display_query, display_query)
         display_label = f"{en_query}（{zh_label}）" if zh_label and zh_label != en_query else en_query
 
-        # ✅ 修正提示（近音字命中時顯示）
         if is_corrected:
-            st.info(f"💡 已自動修正：「{drug_query}」→「{corrected_zh}」，以英文學名「{en_query}」查詢")
-        elif zh_label and zh_label != en_query and any('\u4e00' <= c <= '\u9fff' for c in drug_query):
-            st.caption(f"中文輸入「{drug_query}」→ 以英文學名「{en_query}」查詢")
+            st.info(f"💡 已自動修正：「{display_query}」→「{corrected_zh}」，以英文學名「{en_query}」查詢")
+        elif zh_label and zh_label != en_query and any('\u4e00' <= c <= '\u9fff' for c in display_query):
+            st.caption(f"中文輸入「{display_query}」→ 以英文學名「{en_query}」查詢")
 
         c1, c2 = st.columns(2)
         c1.link_button(
             "🇹🇼 台灣食藥署查詢（開新分頁）",
-            url=f"{TAIWAN_FDA_URL}?drugName={drug_query.replace(' ', '+')}",
+            url=f"{TAIWAN_FDA_URL}?drugName={display_query.replace(' ', '+')}",
             use_container_width=True
         )
         c2.link_button(
@@ -790,18 +793,11 @@ with tab_drug:
         st.divider()
         st.markdown(f"**📋 openFDA 查詢：`{display_label}`**")
 
-        # ✅ 核心修正：只在 query 改變時重新送出 API，結果快取進 session_state
-        if drug_query != st.session_state.drug_last_query:
-            with st.spinner("查詢中..."):
-                st.session_state.drug_results     = search_openfda(en_query)
-                st.session_state.drug_last_query  = drug_query
-                st.session_state.drug_translations = {}   # 換藥時清除翻譯快取
-
         results = st.session_state.drug_results
 
         if not results:
             st.warning(
-                f"openFDA 找不到 '{drug_query}'。 建議：改用英文學名查詢，或點上方按鈕到台灣食藥署查中文藥品。"
+                f"openFDA 找不到 '{display_query}'。 建議：改用英文學名查詢，或點上方按鈕到台灣食藥署查中文藥品。"
             )
         else:
             st.success(f"找到 {len(results)} 筆資料")
@@ -818,7 +814,7 @@ with tab_drug:
                     show_zh = st.toggle(
                         "🌐 顯示中文翻譯（原文保留）",
                         value=False,
-                        key=f"tr_{i}_{drug_query[:10]}"
+                        key=f"tr_{i}_{display_query[:10]}"
                     )
 
                     fields = [
