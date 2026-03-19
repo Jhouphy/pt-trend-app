@@ -4,6 +4,7 @@ import datetime
 import requests
 import xml.etree.ElementTree as ET
 import time
+from muscles_data import MUSCLES, MOVEMENTS, ALIASES
 
 st.set_page_config(page_title="PT 文章發想站", page_icon="📚", layout="wide")
 
@@ -179,7 +180,7 @@ st.caption("文獻搜尋 · 社群雷達 · 衛教靈感一站搞定")
 # ─────────────────────────────────────────
 # 頂部 Tab
 # ─────────────────────────────────────────
-tab_lit, tab_reddit = st.tabs(["📖 文獻搜尋", "💬 社群雷達"])
+tab_lit, tab_reddit, tab_muscle = st.tabs(["📖 文獻搜尋", "💬 社群雷達", "🦴 肌肉查詢"])
 
 # ══════════════════════════════════════════
 # Tab 1：文獻搜尋
@@ -385,6 +386,164 @@ with tab_reddit:
         )
     else:
         st.info("☝️ 輸入自訂關鍵字，或點選上方 A/B 組的標籤，搜尋按鈕會出現在這裡。")
+
+
+# ══════════════════════════════════════════
+# Tab 3：肌肉查詢
+# ══════════════════════════════════════════
+with tab_muscle:
+    st.subheader("🦴 肌肉骨骼查詢")
+    st.caption("查詢動作的主動肌/協同肌/拮抗肌，或搜尋特定肌肉的起止點、神經支配、功能")
+
+    muscle_tab1, muscle_tab2 = st.tabs(["🔄 動作查詢", "🔍 肌肉查詢"])
+
+    # ── 動作查詢 ──
+    with muscle_tab1:
+        st.markdown("**輸入關節動作，查詢相關肌肉**")
+
+        # 動作分類快速選取
+        JOINT_GROUPS = {
+            "髖關節 Hip":     ["hip flexion", "hip extension", "hip abduction", "hip adduction", "hip internal rotation", "hip external rotation"],
+            "膝關節 Knee":    ["knee flexion", "knee extension", "knee internal rotation", "knee external rotation"],
+            "踝關節 Ankle":   ["ankle dorsiflexion", "ankle plantarflexion", "foot inversion", "foot eversion"],
+            "肩關節 Shoulder":["shoulder flexion", "shoulder extension", "shoulder abduction", "shoulder adduction", "shoulder internal rotation", "shoulder external rotation", "shoulder horizontal abduction", "shoulder horizontal adduction"],
+            "肩胛骨 Scapular":["scapular elevation", "scapular depression", "scapular retraction", "scapular protraction", "scapular upward rotation"],
+            "肘/前臂 Elbow":  ["elbow flexion", "elbow extension", "forearm supination", "forearm pronation"],
+            "腕關節 Wrist":   ["wrist flexion", "wrist extension", "wrist radial deviation", "wrist ulnar deviation"],
+            "脊椎 Spine":     ["trunk flexion", "trunk extension", "trunk rotation", "trunk lateral flexion"],
+            "頸椎 Cervical":  ["neck flexion", "neck extension", "neck rotation", "neck lateral flexion"],
+        }
+
+        # 選擇關節分類
+        joint_sel = st.selectbox(
+            "選擇關節",
+            options=list(JOINT_GROUPS.keys()),
+            key="joint_group"
+        )
+
+        # 選擇動作
+        actions = JOINT_GROUPS[joint_sel]
+        action_sel = st.selectbox(
+            "選擇動作",
+            options=actions,
+            format_func=lambda x: f"{MOVEMENTS[x]['zh']}  ({x})" if x in MOVEMENTS else x,
+            key="action_sel"
+        )
+
+        if action_sel and action_sel in MOVEMENTS:
+            mv = MOVEMENTS[action_sel]
+            st.divider()
+            st.markdown(f"### {mv['zh']}　`{action_sel}`")
+            st.caption(f"關節：{mv['joint']}")
+
+            col_a, col_s, col_ant = st.columns(3)
+
+            def show_muscle_list(col, title, color, muscle_list):
+                with col:
+                    st.markdown(f"**{title}**")
+                    for m in muscle_list:
+                        m_key = m.lower().split(" (")[0].strip()
+                        info = MUSCLES.get(m_key)
+                        zh   = info["zh"] if info else ""
+                        label = f"{zh}  " if zh else ""
+                        note  = f" *({m.split('(')[-1].rstrip(')')})*" if "(" in m else ""
+                        if info:
+                            with st.expander(f"{label}{m_key}{note}"):
+                                st.markdown(f"**起點：** {info['origin']}")
+                                st.markdown(f"**止點：** {info['insertion']}")
+                                st.markdown(f"**神經：** {info['innervation']}")
+                                st.markdown(f"**功能：** {'; '.join(info['functions'])}")
+                                if info.get("antagonists"):
+                                    st.markdown(f"**拮抗肌：** {', '.join(info['antagonists'])}")
+                        else:
+                            st.markdown(f"- {m}")
+
+            show_muscle_list(col_a,   "🔴 主動肌 Agonists",    "red",   mv["agonists"])
+            show_muscle_list(col_s,   "🟡 協同肌 Synergists",  "orange",mv["synergists"])
+            show_muscle_list(col_ant, "🔵 拮抗肌 Antagonists", "blue",  mv["antagonists"])
+
+    # ── 肌肉查詢 ──
+    with muscle_tab2:
+        st.markdown("**輸入肌肉名稱查詢詳細資料**")
+        st.caption("支援英文全名、中文名、常用縮寫（如 hamstrings、rotator cuff、旋轉肌袖）")
+
+        muscle_query = st.text_input(
+            "搜尋肌肉",
+            placeholder="e.g. biceps brachii / 肱二頭肌 / hamstrings / 旋轉肌袖",
+            key="muscle_search"
+        ).strip().lower()
+
+        if muscle_query:
+            # 檢查別名
+            expanded = ALIASES.get(muscle_query, [muscle_query])
+            found = []
+            for q in expanded:
+                # 完整比對
+                if q in MUSCLES:
+                    found.append((q, MUSCLES[q]))
+                else:
+                    # 部分比對
+                    matches = [(k, v) for k, v in MUSCLES.items()
+                               if q in k or q in v.get("zh", "").lower()]
+                    found.extend(matches)
+
+            # 去重
+            seen  = set()
+            unique = []
+            for k, v in found:
+                if k not in seen:
+                    seen.add(k)
+                    unique.append((k, v))
+
+            if unique:
+                st.success(f"找到 {len(unique)} 筆結果")
+                for muscle_name, info in unique:
+                    with st.expander(f"**{info['zh']}**　{muscle_name}　｜　{info['region']}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**🟢 起點 Origin：**")
+                            st.info(info["origin"])
+                            st.markdown(f"**🔴 止點 Insertion：**")
+                            st.info(info["insertion"])
+                        with col2:
+                            st.markdown(f"**⚡ 神經支配 Innervation：**")
+                            st.info(info["innervation"])
+                            st.markdown(f"**🎯 功能 Functions：**")
+                            st.info("\n".join(f"• {f}" for f in info["functions"]))
+                        if info.get("antagonists"):
+                            st.markdown(f"**↔️ 拮抗肌 Antagonists：** {', '.join(info['antagonists'])}")
+                        st.markdown(f"[🔗 Wikipedia 查看完整資料](https://en.wikipedia.org/wiki/{muscle_name.replace(' ', '_')})")
+            else:
+                st.warning(f"找不到「{muscle_query}」的資料，請嘗試英文全名或部分關鍵字。")
+                # 顯示部分建議
+                suggestions = [k for k in MUSCLES if muscle_query[:4] in k][:5]
+                if suggestions:
+                    st.caption("您是否在找：" + "、".join(suggestions))
+
+        # 按 Region 瀏覽
+        st.divider()
+        st.markdown("**或依部位瀏覽所有肌肉：**")
+        regions = sorted(set(v["region"] for v in MUSCLES.values()))
+        region_sel = st.selectbox("選擇部位", ["（請選擇）"] + regions, key="region_browse")
+        if region_sel != "（請選擇）":
+            region_muscles = {k: v for k, v in MUSCLES.items() if v["region"] == region_sel}
+            st.caption(f"共 {len(region_muscles)} 條肌肉")
+            for muscle_name, info in region_muscles.items():
+                with st.expander(f"{info['zh']}　{muscle_name}"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("**起點：**")
+                        st.info(info["origin"])
+                        st.markdown("**止點：**")
+                        st.info(info["insertion"])
+                    with c2:
+                        st.markdown("**神經：**")
+                        st.info(info["innervation"])
+                        st.markdown("**功能：**")
+                        st.info("\n".join(f"• {f}" for f in info["functions"]))
+                    if info.get("antagonists"):
+                        st.markdown(f"**拮抗肌：** {', '.join(info['antagonists'])}")
+
 
 st.divider()
 st.caption("📚 PT 文章發想站　｜　PubMed · Google Scholar · Reddit　｜　完全免費，不需要 API Key")
