@@ -180,7 +180,7 @@ st.caption("文獻搜尋 · 社群雷達 · 衛教靈感一站搞定")
 # ─────────────────────────────────────────
 # 頂部 Tab
 # ─────────────────────────────────────────
-tab_lit, tab_reddit, tab_muscle = st.tabs(["📖 文獻搜尋", "💬 社群雷達", "🦴 肌肉查詢"])
+tab_lit, tab_reddit, tab_muscle, tab_drug = st.tabs(["📖 文獻搜尋", "💬 社群雷達", "🦴 肌肉查詢", "💊 藥物查詢"])
 
 # ══════════════════════════════════════════
 # Tab 1：文獻搜尋
@@ -549,6 +549,145 @@ with tab_muscle:
     st.markdown("**📖 資料來源**")
     for src in SOURCES:
         st.markdown(f"- [{src['name']}]({src['url']})　*{src['note']}*")
+
+
+# ══════════════════════════════════════════
+# Tab 4：藥物查詢
+# ══════════════════════════════════════════
+with tab_drug:
+    st.subheader("💊 藥物查詢")
+    st.caption("查詢藥物的適應症、副作用、禁忌症、注意事項")
+
+    OPENFDA_URL   = "https://api.fda.gov/drug/label.json"
+    TAIWAN_FDA_URL = "https://info.fda.gov.tw/MLMS/H0001.aspx"
+
+    def search_openfda(query: str, limit: int = 5) -> list:
+        try:
+            r = requests.get(OPENFDA_URL, params={
+                "search": (f'openfda.brand_name:"{query}" OR '
+                           f'openfda.generic_name:"{query}" OR '
+                           f'openfda.substance_name:"{query}"'),
+                "limit": limit
+            }, timeout=15)
+            if r.status_code == 200 and r.json().get("results"):
+                return r.json()["results"]
+            # 退而求其次：模糊搜尋
+            r2 = requests.get(OPENFDA_URL, params={
+                "search": f'openfda.generic_name:({query})',
+                "limit": limit
+            }, timeout=15)
+            if r2.status_code == 200:
+                return r2.json().get("results", [])
+        except Exception as e:
+            st.error(f"openFDA 查詢失敗：{e}")
+        return []
+
+    def parse_field(result: dict, *fields, max_len: int = 600) -> str:
+        for field in fields:
+            val = result.get(field)
+            if val:
+                text = val[0] if isinstance(val, list) else str(val)
+                text = " ".join(text.split())
+                return text[:max_len] + ("…" if len(text) > max_len else "")
+        return "（無資料）"
+
+    # ── 常用藥物快速選取 ──
+    COMMON_DRUGS = {
+        "NSAIDs": ["ibuprofen", "naproxen", "diclofenac", "celecoxib"],
+        "肌肉鬆弛劑": ["cyclobenzaprine", "baclofen", "tizanidine", "methocarbamol"],
+        "止痛/神經痛": ["acetaminophen", "tramadol", "gabapentin", "pregabalin"],
+        "類固醇": ["prednisone", "methylprednisolone", "dexamethasone"],
+        "外用": ["lidocaine", "capsaicin", "diclofenac"],
+    }
+
+    if "drug_quick" not in st.session_state:
+        st.session_state.drug_quick = ""
+
+    st.markdown("**常見 PT 相關藥物快速選取：**")
+    for category, drugs in COMMON_DRUGS.items():
+        st.caption(f"**{category}**")
+        d_cols = st.columns(len(drugs))
+        for i, d in enumerate(drugs):
+            if d_cols[i].button(d, key=f"dq_{d}", use_container_width=True):
+                st.session_state.drug_quick = d
+                st.rerun()
+
+    st.divider()
+
+    # ── 搜尋框（快速選取會帶入） ──
+    drug_query = st.text_input(
+        "🔍 輸入藥品名稱（英文學名或商品名）",
+        value=st.session_state.drug_quick,
+        placeholder="e.g. ibuprofen / naproxen / aspirin / gabapentin",
+        key="drug_input"
+    ).strip()
+
+    if drug_query:
+        c1, c2 = st.columns(2)
+        c1.link_button(
+            "🇹🇼 台灣食藥署查詢（開新分頁）",
+            url=f"{TAIWAN_FDA_URL}?drugName={drug_query.replace(' ', '+')}",
+            use_container_width=True
+        )
+        c2.link_button(
+            "🌐 Drugs.com（開新分頁）",
+            url=f"https://www.drugs.com/search.php?searchterm={drug_query.replace(' ', '+')}",
+            use_container_width=True
+        )
+
+        st.divider()
+        st.markdown(f"**📋 openFDA 資料庫查詢結果：`{drug_query}`**")
+
+        with st.spinner("查詢中..."):
+            results = search_openfda(drug_query)
+
+        if not results:
+            st.warning(
+                f"openFDA 找不到 '{drug_query}'。 建議：改用英文學名查詢，或點上方按鈕到台灣食藥署查中文藥品。"
+            )
+        else:
+            st.success(f"找到 {len(results)} 筆資料")
+            for i, res in enumerate(results, 1):
+                openfda = res.get("openfda", {})
+                brand   = "、".join(openfda.get("brand_name",   ["未知商品名"])[:2])
+                generic = "、".join(openfda.get("generic_name", ["未知學名"])[:2])
+                manuf   = "、".join(openfda.get("manufacturer_name", ["未知廠商"])[:1])
+
+                with st.expander(f"#{i}　{brand}　｜　{generic}"):
+                    st.caption(f"製造商：{manuf}")
+                    col_a, col_b = st.columns(2)
+
+                    with col_a:
+                        st.markdown("**🎯 適應症 Indications**")
+                        st.info(parse_field(res, "indications_and_usage", "purpose"))
+
+                        st.markdown("**🚫 禁忌症 Contraindications**")
+                        st.warning(parse_field(res, "contraindications"))
+
+                    with col_b:
+                        st.markdown("**⚠️ 副作用 Adverse Reactions**")
+                        st.error(parse_field(res, "adverse_reactions",
+                                             "warnings_and_cautions", "warnings"))
+
+                        st.markdown("**📌 注意事項 Warnings/Precautions**")
+                        st.warning(parse_field(res, "warnings_and_cautions",
+                                               "precautions", "information_for_patients"))
+
+                    st.markdown("**💊 劑量 Dosage & Administration**")
+                    st.info(parse_field(res, "dosage_and_administration"))
+
+        st.divider()
+        st.caption(
+            "⚠️ 以上資訊僅供專業人員參考，不構成醫療建議。"
+            "實際用藥請遵照醫師處方及藥師指示。"
+        )
+        st.caption(
+            "📖 資料來源：[openFDA](https://open.fda.gov/)（美國 FDA 開放資料）　｜　"
+            "[台灣食藥署](https://www.fda.gov.tw/)　｜　"
+            "[Drugs.com](https://www.drugs.com/)"
+        )
+    else:
+        st.info("☝️ 點選上方常用藥物，或輸入藥品名稱開始查詢。")
 
 
 st.divider()
