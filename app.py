@@ -42,13 +42,17 @@ REDDIT_GROUP_B = [
 # Session State
 # ─────────────────────────────────────────
 for key, default in [
-    ("lit_sel_a",  set()),
-    ("lit_sel_b",  set()),
-    ("lit_results", None),
-    ("lit_last_query", ""),
-    ("red_sel_a",  set()),
-    ("red_sel_b",  set()),
-    ("subreddits", DEFAULT_SUBREDDITS.copy()),
+    ("lit_sel_a",        set()),
+    ("lit_sel_b",        set()),
+    ("lit_results",      None),
+    ("lit_last_query",   ""),
+    ("red_sel_a",        set()),
+    ("red_sel_b",        set()),
+    ("subreddits",       DEFAULT_SUBREDDITS.copy()),
+    # 藥物查詢快取
+    ("drug_results",     None),
+    ("drug_last_query",  ""),
+    ("drug_translations", {}),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -558,7 +562,7 @@ with tab_drug:
     st.subheader("💊 藥物查詢")
     st.caption("查詢藥物的適應症、副作用、禁忌症、注意事項")
 
-    OPENFDA_URL   = "https://api.fda.gov/drug/label.json"
+    OPENFDA_URL    = "https://api.fda.gov/drug/label.json"
     TAIWAN_FDA_URL = "https://info.fda.gov.tw/MLMS/H0001.aspx"
 
     def search_openfda(query: str, limit: int = 5) -> list:
@@ -591,8 +595,7 @@ with tab_drug:
                 return text[:max_len] + ("…" if len(text) > max_len else "")
         return "（無資料）"
 
-    # ── 常用藥物快速選取 ──
-    # 藥物中英對照（雙向：英文→中文、中文→英文）
+    # ── 藥物中英對照表 ──
     DRUG_ZH = {
         "ibuprofen": "布洛芬", "naproxen": "萘普生", "diclofenac": "待克菲那",
         "celecoxib": "西樂葆", "indomethacin": "消炎痛",
@@ -605,7 +608,8 @@ with tab_drug:
         "lidocaine": "利多卡因", "capsaicin": "辣椒素",
         "diclofenac gel": "待克菲那凝膠",
     }
-    # 反查表：中文 → 英文學名
+
+    # 反查表：正確中文 → 英文學名
     DRUG_EN = {zh: en for en, zh in DRUG_ZH.items()}
     # 額外常見中文別名
     DRUG_EN.update({
@@ -620,19 +624,78 @@ with tab_drug:
         "辣椒素": "capsaicin",
     })
 
+    # ── 中文近音字／錯別字對照表 ──
+    # 格式：「使用者可能輸入的錯字/近音字」→「正確中文名」
+    # 之後只需在這裡新增，不需動其他邏輯
+    DRUG_PHONETIC = {
+        # 布洛芬 ibuprofen
+        "布洛分": "布洛芬",
+        "部落分": "布洛芬",
+        "部洛芬": "布洛芬",
+        "布落芬": "布洛芬",
+        "布洛奮": "布洛芬",
+        "不落芬": "布洛芬",
+        # 萘普生 naproxen
+        "奈普生": "萘普生",
+        "耐普生": "萘普生",
+        "萘普盛": "萘普生",
+        # 曲馬多 tramadol
+        "曲馬朵": "曲馬多",
+        "曲碼多": "曲馬多",
+        "去馬多": "曲馬多",
+        # 加巴噴丁 gabapentin
+        "加巴喷丁": "加巴噴丁",
+        "加巴本丁": "加巴噴丁",
+        "佳巴噴丁": "加巴噴丁",
+        # 普瑞巴林 pregabalin
+        "普瑞巴靈": "普瑞巴林",
+        "普銳巴林": "普瑞巴林",
+        # 待克菲那 diclofenac
+        "待克非那": "待克菲那",
+        "戴克菲那": "待克菲那",
+        "代克菲那": "待克菲那",
+        # 利多卡因 lidocaine
+        "利多卡音": "利多卡因",
+        "里多卡因": "利多卡因",
+        # 巴氯芬 baclofen
+        "巴路芬": "巴氯芬",
+        "巴氯分": "巴氯芬",
+        # 普拿疼 acetaminophen
+        "普那疼": "普拿疼",
+        "步拿疼": "普拿疼",
+        "普那痛": "普拿疼",
+        # 地塞米松 dexamethasone
+        "地賽米松": "地塞米松",
+        "帝塞米松": "地塞米松",
+        # 辣椒素 capsaicin
+        "辣椒酸": "辣椒素",
+        "辣椒精": "辣椒素",
+    }
+
     def resolve_query(q: str) -> tuple:
-        """把輸入轉成 (英文查詢詞, 中文標籤)"""
+        """把輸入轉成 (英文查詢詞, 中文標籤)，支援近音字/錯別字"""
         q = q.strip()
-        # 若是中文，查反查表
-        if any('一' <= c <= '鿿' for c in q):
+        # 若是中文，先做近音字修正
+        if any('\u4e00' <= c <= '\u9fff' for c in q):
+            # 1. 近音字對照修正
+            corrected = DRUG_PHONETIC.get(q, q)
+            if corrected != q:
+                # 命中近音字表，使用修正後的正確中文繼續查
+                q = corrected
+
+            # 2. 查正確中文 → 英文
             en = DRUG_EN.get(q, "")
             if en:
                 return en, q
-            # 找部分比對
+
+            # 3. 部分比對（含近音字修正後的 q）
             for zh_key, en_val in DRUG_EN.items():
                 if zh_key in q or q in zh_key:
                     return en_val, q
-            return q, q  # 找不到就原文送出（讓 openFDA 試試）
+
+            # 4. 找不到就原文送出（讓 openFDA 試試）
+            return q, q
+
         # 英文：查中文標籤
         zh = DRUG_ZH.get(q.lower(), "")
         return q, zh
@@ -647,22 +710,24 @@ with tab_drug:
 
     # ── 翻譯函式（使用 deep-translator，不需要 API Key）──
     def translate_to_zh(text: str) -> str:
-        """將英文翻譯為繁體中文，藥物名稱不翻譯"""
+        """將英文翻譯為繁體中文"""
         if not text or text == "（無資料）":
             return text
         try:
             from deep_translator import GoogleTranslator
-            # 限制長度避免超過 API 限制
             if len(text) > 4500:
                 text = text[:4500] + "..."
             return GoogleTranslator(source="en", target="zh-TW").translate(text)
         except Exception as e:
             return f"（翻譯失敗：{e}）"
 
+    # ── Session State 初始化 ──
     if "drug_quick" not in st.session_state:
         st.session_state.drug_quick = ""
+    if "drug_input_val" not in st.session_state:
+        st.session_state.drug_input_val = ""
 
-    # ── 快速選取按鈕（放上方，直接寫入 session_state key）──
+    # ── 快速選取按鈕 ──
     st.markdown("**常見 PT 相關藥物快速選取：**")
     for cat_idx, (category, drugs) in enumerate(COMMON_DRUGS.items()):
         st.caption(f"**{category}**")
@@ -677,27 +742,38 @@ with tab_drug:
 
     st.divider()
 
-    # ── 搜尋框：用獨立 session_state key，按鈕點擊後帶入 ──
-    if "drug_input_val" not in st.session_state:
-        st.session_state.drug_input_val = ""
-
+    # ── 搜尋框 ──
     drug_query = st.text_input(
         "🔍 輸入藥品名稱（英文學名、商品名或中文）",
         value=st.session_state.drug_input_val,
-        placeholder="e.g. ibuprofen / 布洛芬 / naproxen / gabapentin",
+        placeholder="e.g. ibuprofen / 布洛芬 / 布洛分 / naproxen / gabapentin",
         key="drug_input"
     ).strip()
 
-    # 同步 text_input 手動輸入回 session_state
+    # 同步手動輸入回 session_state
     if drug_query != st.session_state.drug_input_val:
         st.session_state.drug_input_val = drug_query
 
     st.divider()
 
     if drug_query:
-        # 解析輸入：中文轉英文、取得中文標籤
+        # 解析輸入（含近音字修正）
         en_query, zh_label = resolve_query(drug_query)
+
+        # 偵測是否為近音字修正
+        is_corrected = (
+            any('\u4e00' <= c <= '\u9fff' for c in drug_query)
+            and drug_query in DRUG_PHONETIC
+        )
+        corrected_zh = DRUG_PHONETIC.get(drug_query, drug_query)
+
         display_label = f"{en_query}（{zh_label}）" if zh_label and zh_label != en_query else en_query
+
+        # ✅ 修正提示（近音字命中時顯示）
+        if is_corrected:
+            st.info(f"💡 已自動修正：「{drug_query}」→「{corrected_zh}」，以英文學名「{en_query}」查詢")
+        elif zh_label and zh_label != en_query and any('\u4e00' <= c <= '\u9fff' for c in drug_query):
+            st.caption(f"中文輸入「drug_query}」→ 以英文學名「{en_query}」查詢")
 
         c1, c2 = st.columns(2)
         c1.link_button(
@@ -713,11 +789,15 @@ with tab_drug:
 
         st.divider()
         st.markdown(f"**📋 openFDA 查詢：`{display_label}`**")
-        if zh_label and zh_label != en_query:
-            st.caption(f"中文輸入「{zh_label}」→ 以英文學名「{en_query}」查詢")
 
-        with st.spinner("查詢中..."):
-            results = search_openfda(en_query)
+        # ✅ 核心修正：只在 query 改變時重新送出 API，結果快取進 session_state
+        if drug_query != st.session_state.drug_last_query:
+            with st.spinner("查詢中..."):
+                st.session_state.drug_results     = search_openfda(en_query)
+                st.session_state.drug_last_query  = drug_query
+                st.session_state.drug_translations = {}   # 換藥時清除翻譯快取
+
+        results = st.session_state.drug_results
 
         if not results:
             st.warning(
@@ -742,11 +822,11 @@ with tab_drug:
                     )
 
                     fields = [
-                        ("🎯 適應症 Indications",        "info",    parse_field(res, "indications_and_usage", "purpose")),
-                        ("🚫 禁忌症 Contraindications",  "warning", parse_field(res, "contraindications")),
-                        ("⚠️ 副作用 Adverse Reactions",  "error",   parse_field(res, "adverse_reactions", "warnings_and_cautions", "warnings")),
-                        ("📌 注意事項 Warnings",         "warning", parse_field(res, "warnings_and_cautions", "precautions", "information_for_patients")),
-                        ("💊 劑量 Dosage & Administration", "info", parse_field(res, "dosage_and_administration")),
+                        ("🎯 適應症 Indications",           "info",    parse_field(res, "indications_and_usage", "purpose")),
+                        ("🚫 禁忌症 Contraindications",     "warning", parse_field(res, "contraindications")),
+                        ("⚠️ 副作用 Adverse Reactions",     "error",   parse_field(res, "adverse_reactions", "warnings_and_cautions", "warnings")),
+                        ("📌 注意事項 Warnings",             "warning", parse_field(res, "warnings_and_cautions", "precautions", "information_for_patients")),
+                        ("💊 劑量 Dosage & Administration", "info",    parse_field(res, "dosage_and_administration")),
                     ]
 
                     col_a, col_b = st.columns(2)
@@ -755,10 +835,14 @@ with tab_drug:
                         with col:
                             st.markdown(f"**{label}**")
                             getattr(st, color)(eng_text)
+
                             if show_zh and eng_text != "（無資料）":
-                                with st.spinner("翻譯中..."):
-                                    zh_text = translate_to_zh(eng_text)
-                                st.caption(f"📝 **中文：** {zh_text}")
+                                # ✅ 翻譯快取：已翻過的欄位直接讀取，不重複呼叫 API
+                                cache_key = f"{i}_{fi}"
+                                if cache_key not in st.session_state.drug_translations:
+                                    with st.spinner("翻譯中..."):
+                                        st.session_state.drug_translations[cache_key] = translate_to_zh(eng_text)
+                                st.caption(f"📝 **中文：** {st.session_state.drug_translations[cache_key]}")
 
         st.divider()
         st.caption(
