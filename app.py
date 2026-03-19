@@ -319,8 +319,8 @@ with tab_reddit:
     for i, sub in enumerate(subs):
         with sub_cols[i]:
             st.markdown(f"**r/{sub}**")
-            st.link_button("🔥 熱門", url=reddit_hot_url(sub), use_container_width=True, key=f"hot_{sub}")
-            st.link_button("🆕 最新", url=reddit_new_url(sub), use_container_width=True, key=f"new_{sub}")
+            st.link_button("🔥 熱門", url=reddit_hot_url(sub), use_container_width=True)
+            st.link_button("🆕 最新", url=reddit_new_url(sub), use_container_width=True)
 
     st.divider()
 
