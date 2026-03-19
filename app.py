@@ -592,35 +592,54 @@ with tab_drug:
         return "（無資料）"
 
     # ── 常用藥物快速選取 ──
+    # 藥物中英對照
+    DRUG_ZH = {
+        "ibuprofen": "布洛芬", "naproxen": "萘普生", "diclofenac": "待克菲那",
+        "celecoxib": "西樂葆", "indomethacin": "消炎痛",
+        "cyclobenzaprine": "環苯紮林", "baclofen": "巴氯芬",
+        "tizanidine": "替紮尼定", "methocarbamol": "甲氧卡巴莫",
+        "acetaminophen": "乙醯氨酚/普拿疼", "tramadol": "曲馬多",
+        "gabapentin": "加巴噴丁", "pregabalin": "普瑞巴林",
+        "prednisone": "普賴松", "methylprednisolone": "甲基培尼皮質醇",
+        "dexamethasone": "地塞米松",
+        "lidocaine": "利多卡因", "capsaicin": "辣椒素",
+        "diclofenac gel": "待克菲那凝膠",
+    }
+
     COMMON_DRUGS = {
-        "NSAIDs": ["ibuprofen", "naproxen", "diclofenac", "celecoxib"],
+        "NSAIDs 非類固醇消炎藥": ["ibuprofen", "naproxen", "diclofenac", "celecoxib"],
         "肌肉鬆弛劑": ["cyclobenzaprine", "baclofen", "tizanidine", "methocarbamol"],
-        "止痛/神經痛": ["acetaminophen", "tramadol", "gabapentin", "pregabalin"],
+        "止痛/神經痛藥": ["acetaminophen", "tramadol", "gabapentin", "pregabalin"],
         "類固醇": ["prednisone", "methylprednisolone", "dexamethasone"],
-        "外用": ["lidocaine", "capsaicin", "diclofenac"],
+        "外用藥": ["lidocaine", "capsaicin", "diclofenac gel"],
     }
 
     if "drug_quick" not in st.session_state:
         st.session_state.drug_quick = ""
 
-    st.markdown("**常見 PT 相關藥物快速選取：**")
-    for category, drugs in COMMON_DRUGS.items():
+    # ── 搜尋框（放在快速選取上方，更直覺）──
+    drug_query = st.text_input(
+        "🔍 輸入藥品名稱（英文學名、商品名或中文）",
+        value=st.session_state.drug_quick,
+        placeholder="e.g. ibuprofen / 布洛芬 / naproxen / gabapentin",
+        key="drug_input"
+    ).strip()
+
+    st.divider()
+    st.markdown("**或從常見 PT 相關藥物快速選取：**")
+    for cat_idx, (category, drugs) in enumerate(COMMON_DRUGS.items()):
         st.caption(f"**{category}**")
         d_cols = st.columns(len(drugs))
         for i, d in enumerate(drugs):
-            if d_cols[i].button(d, key=f"dq_{d}", use_container_width=True):
+            zh = DRUG_ZH.get(d, "")
+            label = f"{d}\n{zh}" if zh else d
+            # key 加入 cat_idx 避免跨分類重複
+            if d_cols[i].button(d, key=f"dq_{cat_idx}_{d}", use_container_width=True,
+                                help=zh if zh else None):
                 st.session_state.drug_quick = d
                 st.rerun()
 
     st.divider()
-
-    # ── 搜尋框（快速選取會帶入） ──
-    drug_query = st.text_input(
-        "🔍 輸入藥品名稱（英文學名或商品名）",
-        value=st.session_state.drug_quick,
-        placeholder="e.g. ibuprofen / naproxen / aspirin / gabapentin",
-        key="drug_input"
-    ).strip()
 
     if drug_query:
         c1, c2 = st.columns(2)
