@@ -592,7 +592,7 @@ with tab_drug:
         return "（無資料）"
 
     # ── 常用藥物快速選取 ──
-    # 藥物中英對照
+    # 藥物中英對照（雙向：英文→中文、中文→英文）
     DRUG_ZH = {
         "ibuprofen": "布洛芬", "naproxen": "萘普生", "diclofenac": "待克菲那",
         "celecoxib": "西樂葆", "indomethacin": "消炎痛",
@@ -605,6 +605,37 @@ with tab_drug:
         "lidocaine": "利多卡因", "capsaicin": "辣椒素",
         "diclofenac gel": "待克菲那凝膠",
     }
+    # 反查表：中文 → 英文學名
+    DRUG_EN = {zh: en for en, zh in DRUG_ZH.items()}
+    # 額外常見中文別名
+    DRUG_EN.update({
+        "布洛芬": "ibuprofen", "普拿疼": "acetaminophen",
+        "乙醯氨酚": "acetaminophen", "止痛藥": "acetaminophen",
+        "萘普生": "naproxen", "西樂葆": "celecoxib",
+        "待克菲那": "diclofenac", "消炎痛": "indomethacin",
+        "巴氯芬": "baclofen", "加巴噴丁": "gabapentin",
+        "普瑞巴林": "pregabalin", "曲馬多": "tramadol",
+        "類固醇": "prednisone", "可體松": "prednisone",
+        "地塞米松": "dexamethasone", "利多卡因": "lidocaine",
+        "辣椒素": "capsaicin",
+    })
+
+    def resolve_query(q: str) -> tuple:
+        """把輸入轉成 (英文查詢詞, 中文標籤)"""
+        q = q.strip()
+        # 若是中文，查反查表
+        if any('一' <= c <= '鿿' for c in q):
+            en = DRUG_EN.get(q, "")
+            if en:
+                return en, q
+            # 找部分比對
+            for zh_key, en_val in DRUG_EN.items():
+                if zh_key in q or q in zh_key:
+                    return en_val, q
+            return q, q  # 找不到就原文送出（讓 openFDA 試試）
+        # 英文：查中文標籤
+        zh = DRUG_ZH.get(q.lower(), "")
+        return q, zh
 
     COMMON_DRUGS = {
         "NSAIDs 非類固醇消炎藥": ["ibuprofen", "naproxen", "diclofenac", "celecoxib"],
@@ -631,31 +662,43 @@ with tab_drug:
     if "drug_quick" not in st.session_state:
         st.session_state.drug_quick = ""
 
-    # ── 搜尋框（放在快速選取上方，更直覺）──
-    drug_query = st.text_input(
-        "🔍 輸入藥品名稱（英文學名、商品名或中文）",
-        value=st.session_state.drug_quick,
-        placeholder="e.g. ibuprofen / 布洛芬 / naproxen / gabapentin",
-        key="drug_input"
-    ).strip()
-
-    st.divider()
-    st.markdown("**或從常見 PT 相關藥物快速選取：**")
+    # ── 快速選取按鈕（放上方，直接寫入 session_state key）──
+    st.markdown("**常見 PT 相關藥物快速選取：**")
     for cat_idx, (category, drugs) in enumerate(COMMON_DRUGS.items()):
         st.caption(f"**{category}**")
         d_cols = st.columns(len(drugs))
         for i, d in enumerate(drugs):
             zh = DRUG_ZH.get(d, "")
-            label = f"{d}\n{zh}" if zh else d
-            # key 加入 cat_idx 避免跨分類重複
-            if d_cols[i].button(d, key=f"dq_{cat_idx}_{d}", use_container_width=True,
-                                help=zh if zh else None):
-                st.session_state.drug_quick = d
+            btn_label = f"{d}  {zh}" if zh else d
+            if d_cols[i].button(btn_label, key=f"dq_{cat_idx}_{i}_{d}",
+                                use_container_width=True):
+                st.session_state["drug_input_val"] = d
                 st.rerun()
 
     st.divider()
 
+    # ── 搜尋框：用獨立 session_state key，按鈕點擊後帶入 ──
+    if "drug_input_val" not in st.session_state:
+        st.session_state.drug_input_val = ""
+
+    drug_query = st.text_input(
+        "🔍 輸入藥品名稱（英文學名、商品名或中文）",
+        value=st.session_state.drug_input_val,
+        placeholder="e.g. ibuprofen / 布洛芬 / naproxen / gabapentin",
+        key="drug_input"
+    ).strip()
+
+    # 同步 text_input 手動輸入回 session_state
+    if drug_query != st.session_state.drug_input_val:
+        st.session_state.drug_input_val = drug_query
+
+    st.divider()
+
     if drug_query:
+        # 解析輸入：中文轉英文、取得中文標籤
+        en_query, zh_label = resolve_query(drug_query)
+        display_label = f"{en_query}（{zh_label}）" if zh_label and zh_label != en_query else en_query
+
         c1, c2 = st.columns(2)
         c1.link_button(
             "🇹🇼 台灣食藥署查詢（開新分頁）",
@@ -664,15 +707,17 @@ with tab_drug:
         )
         c2.link_button(
             "🌐 Drugs.com（開新分頁）",
-            url=f"https://www.drugs.com/search.php?searchterm={drug_query.replace(' ', '+')}",
+            url=f"https://www.drugs.com/search.php?searchterm={en_query.replace(' ', '+')}",
             use_container_width=True
         )
 
         st.divider()
-        st.markdown(f"**📋 openFDA 資料庫查詢結果：`{drug_query}`**")
+        st.markdown(f"**📋 openFDA 查詢：`{display_label}`**")
+        if zh_label and zh_label != en_query:
+            st.caption(f"中文輸入「{zh_label}」→ 以英文學名「{en_query}」查詢")
 
         with st.spinner("查詢中..."):
-            results = search_openfda(drug_query)
+            results = search_openfda(en_query)
 
         if not results:
             st.warning(
@@ -686,7 +731,8 @@ with tab_drug:
                 generic = "、".join(openfda.get("generic_name", ["未知學名"])[:2])
                 manuf   = "、".join(openfda.get("manufacturer_name", ["未知廠商"])[:1])
 
-                with st.expander(f"#{i}　{brand}　｜　{generic}"):
+                zh_tag = f"（{zh_label}）" if zh_label and zh_label != en_query else ""
+                with st.expander(f"#{i}　{brand}{zh_tag}　｜　{generic}"):
                     st.caption(f"製造商：{manuf}")
 
                     show_zh = st.toggle(
