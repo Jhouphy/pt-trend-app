@@ -461,7 +461,7 @@ MUSCLES = {
     },
     "pectoralis major": {
         "zh": "胸大肌",
-        "origin": "Clavicular head: Medial half of clavicle; Sternocostal head: Sternum, Costal cartilages 1-6; Abdominal part: External oblique aponeurosis",
+        "origin": "Clavicular head: Sternal half of clavicle; Sternocostal head: Sternum, Costal cartilages of ribs 1-7 (true ribs); Abdominal part: Aponeurosis of external abdominal oblique",
         "insertion": "Lateral lip of intertubercular sulcus of humerus",
         "innervation": "Medial and lateral pectoral nerves (C5-T1)",
         "functions": ["Shoulder adduction", "Shoulder internal rotation", "Shoulder flexion (clavicular head)", "Shoulder extension (sternocostal head from flexion)"],
@@ -479,7 +479,7 @@ MUSCLES = {
     },
     "latissimus dorsi": {
         "zh": "背闊肌",
-        "origin": "Spinous processes T7-L5; Thoracolumbar fascia; Iliac crest (posterior third); Lower ribs 9-12; Inferior angle of scapula",
+        "origin": "Spinous processes T7-L5 (sometimes to sacrum); Thoracolumbar fascia; Iliac crest (posterior third); Last 3-4 ribs; Inferior angle of scapula (sometimes)",
         "insertion": "Floor of intertubercular sulcus of humerus",
         "innervation": "Thoracodorsal nerve (C6-C8)",
         "functions": ["Shoulder extension", "Shoulder adduction", "Shoulder internal rotation"],
@@ -488,7 +488,7 @@ MUSCLES = {
     },
     "serratus anterior": {
         "zh": "前鋸肌",
-        "origin": "Lateral surfaces of ribs 1-9 (digitations)",
+        "origin": "Lateral surfaces of ribs 1-8 or 9",
         "insertion": "Costal surface of medial border of scapula",
         "innervation": "Long thoracic nerve (C5-C7)",
         "functions": ["Scapular protraction", "Scapular upward rotation", "Holds scapula against chest wall"],
@@ -656,7 +656,7 @@ MUSCLES = {
         "zh": "指深屈肌",
         "origin": "Anteromedial surface of ulna; Interosseous membrane",
         "insertion": "Bases of distal phalanges of digits 2-5",
-        "innervation": "Digits 2-3: Anterior interosseous nerve (C8-T1); Digits 4-5: Ulnar nerve (C8-T1)",
+        "innervation": "Radial half (digits 2-3): Median nerve via anterior interosseous branch (C8-T1); Ulnar half (digits 4-5): Ulnar nerve (C8-T1)",
         "functions": ["Finger flexion (DIP joints 2-5)", "Wrist flexion"],
         "antagonists": ["Extensor digitorum"],
         "region": "Forearm",
@@ -683,7 +683,7 @@ MUSCLES = {
     },
     "external oblique": {
         "zh": "腹外斜肌",
-        "origin": "External surfaces of ribs 5-12 (digitations)",
+        "origin": "External surfaces of lower 8 ribs (ribs 5-12)",
         "insertion": "Iliac crest (anterior half); Linea alba; Inguinal ligament",
         "innervation": "Thoracoabdominal nerves T8-T12; Iliohypogastric nerve (L1)",
         "functions": ["Trunk flexion (bilateral)", "Trunk rotation (contralateral)", "Trunk lateral flexion (ipsilateral)", "Compresses abdomen"],
@@ -701,7 +701,7 @@ MUSCLES = {
     },
     "transversus abdominis": {
         "zh": "腹橫肌",
-        "origin": "Thoracolumbar fascia; Iliac crest; Lateral inguinal ligament; Costal cartilages 7-12",
+        "origin": "Lower 6 ribs (costal cartilages 7-12); Thoracolumbar fascia; Anterior 3/4 of iliac crest; Lateral 1/3 of inguinal ligament",
         "insertion": "Linea alba; Pubic crest",
         "innervation": "Thoracoabdominal nerves T7-T12; Iliohypogastric and ilioinguinal nerves (L1)",
         "functions": ["Abdominal compression", "Increases intra-abdominal pressure", "Core/trunk stabilization (key stabilizer)"],
@@ -751,9 +751,9 @@ MUSCLES = {
     "levator scapulae": {
         "zh": "提肩胛肌",
         "origin": "Transverse processes of C1-C4",
-        "insertion": "Superior angle of scapula; Medial border of scapula (above spine)",
-        "innervation": "Dorsal scapular nerve (C3-C5)",
-        "functions": ["Scapular elevation", "Scapular downward rotation", "Neck lateral flexion (ipsilateral)"],
+        "insertion": "Medial border of scapula from superior angle to root of spine of scapula",
+        "innervation": "Anterior rami C3-C4 and dorsal scapular nerve (C5)",
+        "functions": ["Scapular elevation", "Scapular downward rotation", "Glenoid fossa inferior rotation", "Neck lateral flexion (ipsilateral)"],
         "antagonists": ["Trapezius (lower fibers)", "Serratus anterior (lower)"],
         "region": "Neck / Shoulder",
     },
@@ -768,9 +768,9 @@ MUSCLES = {
     },
     "scalenes": {
         "zh": "斜角肌群（前/中/後）",
-        "origin": "Anterior/Middle/Posterior: Transverse processes of cervical vertebrae (varying levels)",
-        "insertion": "Anterior: Superior surface of 1st rib; Middle: Superior surface of 1st rib; Posterior: External surface of 2nd rib",
-        "innervation": "Ventral rami of cervical nerves (C4-C8)",
+        "origin": "Anterior: Anterior tubercles of transverse processes C3-C6; Middle: Posterior tubercles C2-C7; Posterior: Posterior tubercles C4-C6",
+        "insertion": "Anterior: Scalene tubercle of 1st rib; Middle: Upper surface of 1st rib; Posterior: Outer surface of 2nd rib",
+        "innervation": "Anterior: Anterior rami C5-C8; Middle: Anterior rami C3-C7; Posterior: Anterior rami C5-C8",
         "functions": ["Bilateral: Neck flexion, Rib elevation (inspiration); Unilateral: Lateral flexion (ipsilateral), Rotation (contralateral)"],
         "antagonists": ["Splenius capitis", "Sternocleidomastoid (rotation)"],
         "region": "Neck",
@@ -1116,23 +1116,28 @@ ALIASES = {
 # ─────────────────────────────────────────
 SOURCES = [
     {
-        "name": "UAMS Department of Neuroscience – Muscle Tables",
+        "name": "UAMS – Muscle Tables (Primary Source)",
         "url": "https://medicine.uams.edu/neuroscience/education/medical-school-courses/human-structure-module/anatomy-tables/muscle-tables/",
-        "note": "University of Arkansas for Medical Sciences, Human Structure Module"
+        "note": "University of Arkansas for Medical Sciences, Human Structure Module（主要來源，所有分區完整比對驗證）"
     },
     {
-        "name": "Kenhub – Lower Limb Muscle Charts",
+        "name": "Kenhub – Lower Limb Muscle Charts (Primary Source)",
         "url": "https://www.kenhub.com",
-        "note": "Cheat Sheet (English Terminology)"
+        "note": "下肢肌肉 Cheat Sheet (English Terminology)（主要來源）"
     },
     {
-        "name": "Gray\'s Anatomy",
+        "name": "Gray\'s Anatomy (40th Edition)",
         "url": "https://en.wikipedia.org/wiki/Gray%27s_Anatomy",
-        "note": "Standard anatomical reference"
+        "note": "Standard anatomical reference（補充參考）"
     },
     {
-        "name": "Wikipedia – Human Anatomy",
+        "name": "Wikipedia – Individual Muscle Articles",
         "url": "https://en.wikipedia.org/wiki/Muscle",
-        "note": "Supplementary reference for individual muscle articles"
+        "note": "各條肌肉的 Wikipedia 頁面（補充參考）"
+    },
+    {
+        "name": "Gray's Anatomy (Grays Anatomy for Students)",
+        "url": "https://en.wikipedia.org/wiki/Gray%27s_Anatomy",
+        "note": "第三來源，用於交叉驗證（Primary Source）"
     },
 ]
