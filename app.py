@@ -229,13 +229,31 @@ if has_input:
     st.code(preview)
 
     # 按鈕列
-    col_search, col_scholar = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
-    do_search = col_search.button(
-        "🔬 PubMed 搜尋（結果顯示在下方）",
+    do_search = col1.button(
+        "🔬 PubMed（結果顯示下方）",
         use_container_width=True, type="primary"
     )
-    col_scholar.link_button(
+
+    # PubMed 開新分頁 URL
+    pubmed_full = query
+    if base.strip():
+        pubmed_full += f" {base.strip()}"
+    excl_str = " NOT ".join(ex.strip() for ex in excl if ex.strip())
+    if excl_str:
+        pubmed_full += f" NOT ({excl_str})"
+    from urllib.parse import urlencode as _ue
+    pubmed_tab_url = "https://pubmed.ncbi.nlm.nih.gov/?" + _ue({
+        "term": f"({pubmed_full}) AND {y1}:{y2}[pdat]"
+    })
+
+    col2.link_button(
+        "🔗 PubMed（開新分頁）",
+        url=pubmed_tab_url,
+        use_container_width=True
+    )
+    col3.link_button(
         "🔗 Google Scholar（開新分頁）",
         url=scholar_url(query, base, excl, y1, y2),
         use_container_width=True
